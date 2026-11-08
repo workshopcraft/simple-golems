@@ -55,13 +55,28 @@ public class LumberWork implements JobWork {
     @Override
     public @Nullable BlockPos findTarget(GolemEntity golem, ServerLevel level, WorkArea area, Predicate<BlockPos> skip) {
         List<BlockPos> bases = new ArrayList<>();
+        List<BlockPos> orphans = new ArrayList<>();
         for (BlockPos p : BlockPos.betweenClosed(area.min(), area.max())) {
             BlockState s = level.getBlockState(p);
-            if (isBase(level, p, s) && golem.canHarvest(s) && !skip.test(p)) bases.add(p.immutable());
+            if (!s.is(ModTags.LOGS) || !golem.canHarvest(s) || skip.test(p)) continue;
+            BlockPos imm = p.immutable();
+            if (isBase(level, p, s)) bases.add(imm);
+            else orphans.add(imm);
         }
         bases.sort(Comparator.comparingDouble(p -> golem.distanceToSqr(Vec3.atCenterOf(p))));
         for (BlockPos p : bases) {
             if (tree(level, p) != null) return p;
+        }
+        // floating leftovers after an axe broke mid-fell: retarget the lowest remaining log of that tree
+        orphans.sort(Comparator.<BlockPos>comparingInt(p -> (int) p.getY()).thenComparingDouble(p -> golem.distanceToSqr(Vec3.atCenterOf(p))));
+        Set<BlockPos> seen = new HashSet<>();
+        for (BlockPos p : orphans) {
+            if (seen.contains(p)) continue;
+            Tree t = tree(level, p);
+            if (t == null) continue;
+            seen.addAll(t.logs());
+            BlockPos lowest = t.logs().stream().min(Comparator.comparingInt(p2 -> (int) p2.getY())).orElse(p);
+            if (!skip.test(lowest) && golem.canHarvest(level.getBlockState(lowest))) return lowest;
         }
         return null;
     }
@@ -173,6 +188,11 @@ public class LumberWork implements JobWork {
     }
 
     @Override
+    public double climbAbove() {
+        return 2.0;
+    }
+
+    @Override
     public boolean isValid(ServerLevel level, BlockPos pos) {
         return level.getBlockState(pos).is(ModTags.LOGS);
     }
@@ -184,10 +204,19 @@ public class LumberWork implements JobWork {
         return Math.min(200, golem.digTicks(level.getBlockState(pos), pos) * (1 + logs / 4));
     }
 
+    private static boolean canFell(ItemStack tool, int logs) {
+        if (tool.isEmpty()) return false;
+        if (!tool.isDamageableItem()) return true;
+        return tool.getMaxDamage() - tool.getDamageValue() >= logs;
+    }
+
     @Override
     public void finish(GolemEntity golem, ServerLevel level, BlockPos pos) {
         Tree tree = tree(level, pos);
         if (tree == null) return;
+        ItemStack axe = golem.getTool();
+        // wait for a fresh axe rather than leave floating tops and no sapling
+        if (!canFell(axe, tree.logs().size())) return;
         List<ItemStack> drops = new ArrayList<>();
         List<BlockPos> cleared = new ArrayList<>();
         int particles = 0;
@@ -229,11 +258,15 @@ public class LumberWork implements JobWork {
         if (c == null) return false;
         int slot = saplingSlot(c, level, base);
         if (slot < 0) return false;
-        ItemStack one = c.removeItem(slot, 1);
-        plant(level, base, List.of(one));
-        if (!one.isEmpty()) Storage.insert(c, one);
-        c.setChanged();
-        return true;
+        boolean[] ok = {false};
+        golem.useStorage(chest, () -> {
+            ItemStack one = c.removeItem(slot, 1);
+            plant(level, base, List.of(one));
+            if (!one.isEmpty()) Storage.insert(c, one);
+            c.setChanged();
+            ok[0] = true;
+        });
+        return ok[0];
     }
 
     private static @Nullable BlockState saplingFor(ItemStack stack, ServerLevel level, BlockPos pos) {

@@ -97,6 +97,12 @@ public class GolemItem extends Item {
 
     @Override
     public Component getName(ItemStack stack) {
+        //? if >=1.20.5 {
+        Component custom = stack.get(DataComponents.CUSTOM_NAME);
+        if (custom != null) return custom;
+        //?} else {
+        /*if (stack.hasCustomHoverName()) return stack.getHoverName();
+        *///?}
         return Component.translatable("item.simplegolems.golem." + ItemData.getOrDefault(stack, ModContent.JOB, Job.BLANK).getSerializedName());
     }
 

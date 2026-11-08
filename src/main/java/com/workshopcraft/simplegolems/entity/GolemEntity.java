@@ -147,6 +147,8 @@ public class GolemEntity extends AbstractGolem {
     private int lastFight = -10000;
     private int kills;
     private final Map<UUID, Long> skip = new HashMap<>();
+    private @Nullable BlockPos lidOpen;
+    private int lidTicks;
 
     public GolemEntity(EntityType<? extends GolemEntity> type, Level level) {
         super(type, level);
@@ -565,6 +567,11 @@ public class GolemEntity extends AbstractGolem {
             return;
         }
         if (getY() < Mc.minY(level()) && Config.voidRescue) rescueFromVoid();
+        if (level() instanceof ServerLevel sl) {
+            JobWork work = JobWork.of(getJob());
+            if (work != null) work.keepClear(this, sl);
+            if (lidTicks > 0 && --lidTicks == 0) closeLid();
+        }
         if (tickCount % 40 == 0 && level() instanceof ServerLevel sl) recheckTrouble(sl);
         if (thanks > 0) thanks--;
         if (getJob() == Job.GUARD) guardTick();
@@ -819,7 +826,17 @@ public class GolemEntity extends AbstractGolem {
         setColour(ItemData.get(stack, ModContent.COLOUR));
         //? if >=1.20.5 {
         GolemItem.migrate(stack, registryAccess());
-        //?}
+        Component custom = stack.get(DataComponents.CUSTOM_NAME);
+        if (custom != null) {
+            setCustomName(custom);
+            setCustomNameVisible(true);
+        }
+        //?} else {
+        /*if (stack.hasCustomHoverName()) {
+            setCustomName(stack.getHoverName());
+            setCustomNameVisible(true);
+        }
+        *///?}
         List<ItemStack> items = ItemData.items(stack);
         setTool(items.size() > 0 ? items.get(0) : ItemStack.EMPTY);
         cookies = items.size() > 1 ? items.get(1) : ItemStack.EMPTY;
@@ -850,6 +867,39 @@ public class GolemEntity extends AbstractGolem {
 
     public boolean canBeChangedBy(Player player) {
         return owner == null || owner.equals(player.getUUID()) || Mc.creative(player);
+    }
+
+    // open a chest/barrel/shulker while using it; lid closes a moment later
+    // only one startOpen per close — re-entering the same chest must not bump the opener count again
+    public void useStorage(BlockPos pos, Runnable action) {
+        if (!(level() instanceof ServerLevel sl)) {
+            action.run();
+            return;
+        }
+        if (lidOpen != null && !lidOpen.equals(pos)) closeLid();
+        if (lidOpen == null) {
+            Storage.open(sl, pos, this);
+            lidOpen = pos.immutable();
+        }
+        lidTicks = 30;
+        action.run();
+    }
+
+    private void closeLid() {
+        if (lidOpen == null || !(level() instanceof ServerLevel sl)) {
+            lidOpen = null;
+            lidTicks = 0;
+            return;
+        }
+        Storage.close(sl, lidOpen, this);
+        lidOpen = null;
+        lidTicks = 0;
+    }
+
+    @Override
+    public void remove(RemovalReason reason) {
+        closeLid();
+        super.remove(reason);
     }
 
     private void tell(Player player, String key, Object... args) {
@@ -968,6 +1018,25 @@ public class GolemEntity extends AbstractGolem {
             return InteractionResult.SUCCESS;
         }
 
+        //? if >=1.20.5 {
+        Component tagName = held.is(Items.NAME_TAG) ? held.get(DataComponents.CUSTOM_NAME) : null;
+        //?} else {
+        /*Component tagName = held.is(Items.NAME_TAG) && held.hasCustomHoverName() ? held.getHoverName() : null;
+        *///?}
+        if (tagName != null) {
+            if (server) {
+                if (!canBeChangedBy(player)) {
+                    tell(player, "not_yours");
+                } else {
+                    setCustomName(tagName);
+                    setCustomNameVisible(true);
+                    if (!Mc.creative(player)) held.shrink(1);
+                    playSound(SoundEvents.BOOK_PAGE_TURN, 1.0F, 1.4F);
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
         //? if >=1.21.5 {
         DyeColor dye = held.get(DataComponents.DYE);
         //?} else {
@@ -1027,6 +1096,11 @@ public class GolemEntity extends AbstractGolem {
             return InteractionResult.SUCCESS;
         }
         return super.mobInteract(player, hand);
+    }
+
+    @Override
+    public boolean shouldShowName() {
+        return hasCustomName() || super.shouldShowName();
     }
 
     // a miner only steps down one block at a time, so it does not drop into a cave it cannot climb out of

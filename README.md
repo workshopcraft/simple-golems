@@ -44,7 +44,7 @@ A golem made without a card is a blank golem. It follows its owner around and do
 - Tools work like they do for a player. The tier decides what can be harvested and how fast, and Efficiency, Unbreaking, Fortune and Silk Touch all apply. A miner with a stone pickaxe leaves diamond ore alone, and nothing short of diamond touches obsidian.
 - Use clay cookies on it to fill its cookie tin (one stack). One cookie powers about 5 minutes of work. Walking around idle and following you cost nothing.
 - Use a dye on it to colour it. All 16 dyes work.
-- Use a name tag to name it.
+- Use a name tag to name it, or name the golem item in an anvil first. A named golem always shows its name above its head, and the name stays when you pick it up.
 - Use an empty hand on it to take everything it is carrying, or to see its status if it carries nothing.
 - Sneak and use a stick on it to take its card out. It becomes a blank golem. Use a card on a blank golem to give it a new job.
 
@@ -163,5 +163,6 @@ The build uses Stonecutter with one source tree in `src/`, one node per Minecraf
 
 ## Changelog
 
+- **1.1.5**: recipe book unlocks when you pick up a clay ball or already have a Marker Stick. A lumber golem that breaks its axe mid-tree fetches another and climbs to finish floating logs before replanting. Cobblegen and hammer golems stand beside their work block so they are not suffocated, lava-pushed or in the way of placing. All golems keep out of the void, fire and lava and steer out if they end up in lava or fire. Golem items can be named in an anvil, name tags work on placed golems, and a named golem always shows its name above its head (the name stays when you pick it up).
 - **1.1.4**: new guard golem (Guarding Card, iron sword hint) that guards its area or follows you on a lead, fights hostile mobs with a sword or axe, hits creepers and backs off before they blow, heals with cookies and goes down for a while instead of dying. A lumber golem builds log steps up to a tree it cannot reach and takes them away after. A golem just outside a custom area walks back in.
 - **1.1.3**: a miner never places a block in the headroom of its own staircase, and digs out any block blocking its way back up instead of spinning in place. Fixed a golem climbing out of a hole sometimes never noticing it was out, and a miner standing half over the top step it needs to build never moving aside to build it (both seen mostly on NeoForge).

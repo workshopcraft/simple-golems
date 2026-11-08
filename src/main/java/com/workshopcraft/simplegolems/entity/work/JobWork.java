@@ -102,6 +102,15 @@ public interface JobWork {
         return false;
     }
 
+    // how far above the golem a WORK target must be before it builds steps up (lumber uses a lower gate for floating remnants)
+    default double climbAbove() {
+        return 4.0;
+    }
+
+    // called every tick: stay out of cells that would trap or block the job (cobblegen mine spot, hammer place spot)
+    default void keepClear(GolemEntity golem, ServerLevel level) {
+    }
+
     static @Nullable JobWork of(Job job) {
         return switch (job) {
             case LUMBER -> LumberWork.INSTANCE;

@@ -4,11 +4,13 @@ import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
 import com.workshopcraft.simplegolems.entity.WorkArea;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -120,26 +122,72 @@ public abstract class StationWork implements JobWork {
     protected boolean take(GolemEntity golem, ServerLevel level, BlockPos from, int slot, Predicate<ItemStack> want) {
         Container c = Storage.containerAt(level, from);
         if (c == null) return false;
-        ItemStack got = golem.getCarried().get(slot);
-        for (int i = 0; i < c.getContainerSize(); i++) {
-            ItemStack s = c.getItem(i);
-            if (s.isEmpty() || !want.test(s) || !got.isEmpty() && !Mc.sameItem(got, s)) continue;
-            int room = got.isEmpty() ? s.getMaxStackSize() : got.getMaxStackSize() - got.getCount();
-            if (room <= 0) break;
-            ItemStack t = c.removeItem(i, Math.min(room, s.getCount()));
-            if (got.isEmpty()) got = t;
-            else got.grow(t.getCount());
-        }
-        golem.getCarried().set(slot, got);
-        golem.carriedChanged();
-        c.setChanged();
-        if (!got.isEmpty()) golem.playSound(SoundEvents.BUNDLE_INSERT, 0.6F, 1.2F);
-        return !got.isEmpty();
+        boolean[] ok = {false};
+        golem.useStorage(from, () -> {
+            ItemStack got = golem.getCarried().get(slot);
+            for (int i = 0; i < c.getContainerSize(); i++) {
+                ItemStack s = c.getItem(i);
+                if (s.isEmpty() || !want.test(s) || !got.isEmpty() && !Mc.sameItem(got, s)) continue;
+                int room = got.isEmpty() ? s.getMaxStackSize() : got.getMaxStackSize() - got.getCount();
+                if (room <= 0) break;
+                ItemStack t = c.removeItem(i, Math.min(room, s.getCount()));
+                if (got.isEmpty()) got = t;
+                else got.grow(t.getCount());
+            }
+            golem.getCarried().set(slot, got);
+            golem.carriedChanged();
+            c.setChanged();
+            if (!got.isEmpty()) golem.playSound(SoundEvents.BUNDLE_INSERT, 0.6F, 1.2F);
+            ok[0] = !got.isEmpty();
+        });
+        return ok[0];
     }
 
     protected static boolean sourceHas(ServerLevel level, @Nullable BlockPos from, Predicate<ItemStack> want) {
         if (from == null) return false;
         Container c = Storage.containerAt(level, from);
         return c != null && has(c, want);
+    }
+
+    // stand beside the work cell, never in it: empty fluids so cobblegen is not lava-pushed and hammer can place
+    protected static @Nullable BlockPos standBeside(Level level, BlockPos target) {
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            for (int dy = 0; dy <= 1; dy++) {
+                BlockPos p = target.relative(d).above(dy), below = p.below();
+                if (!level.getBlockState(p).getCollisionShape(level, p).isEmpty() || !level.getFluidState(p).isEmpty()) continue;
+                if (!level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty() || !level.getFluidState(p.above()).isEmpty()) continue;
+                if (!level.getBlockState(below).isFaceSturdy(level, below, Direction.UP) || !level.getFluidState(below).isEmpty()) continue;
+                double d2 = p.distSqr(target);
+                if (d2 < bestDist) {
+                    best = p.immutable();
+                    bestDist = d2;
+                }
+            }
+        }
+        return best;
+    }
+
+    // get out of the work cell so a block can be placed there; snap beside when possible
+    protected static boolean clearSpot(GolemEntity golem, Level level, BlockPos spot) {
+        if (!golem.getBoundingBox().intersects(new AABB(spot))) return true;
+        BlockPos aside = standBeside(level, spot);
+        if (aside != null) {
+            golem.getNavigation().stop();
+            Mc.place(golem, aside.getX() + 0.5, aside.getY(), aside.getZ() + 0.5, golem.getYRot(), golem.getXRot());
+            golem.setDeltaMovement(Vec3.ZERO);
+            return !golem.getBoundingBox().intersects(new AABB(spot));
+        }
+        // no free neighbor: shove horizontally away from the spot center
+        Vec3 c = Vec3.atCenterOf(spot);
+        double dx = golem.getX() - c.x, dz = golem.getZ() - c.z;
+        if (dx * dx + dz * dz < 1.0E-4) {
+            dx = 1.0;
+            dz = 0.0;
+        }
+        double len = Math.sqrt(dx * dx + dz * dz);
+        golem.setDeltaMovement(dx / len * 0.45, golem.getDeltaMovement().y, dz / len * 0.45);
+        return false;
     }
 }

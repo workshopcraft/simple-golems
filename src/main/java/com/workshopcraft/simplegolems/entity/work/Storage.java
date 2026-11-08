@@ -10,16 +10,21 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.BarrelBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.entity.LidBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -96,6 +101,66 @@ public final class Storage {
             return stack.copyWithCount(stack.getCount() - in);
         }
         return HopperBlockEntity.addItem(null, c, stack, null);
+    }
+
+    // cosmetic open/close only — never call startOpen(player).
+    // that API is for real player GUIs; using the owner as a fake opener desyncs vanilla's opener count
+    // (recheck closes, then the stale count reopens the lid and it sticks until chunk reload)
+    public static void open(ServerLevel level, BlockPos pos, GolemEntity golem) {
+        BlockEntity be = level.getBlockEntity(pos);
+        clearStaleOpeners(level, pos, be, golem);
+        setLid(level, pos, be, true);
+        playLid(level, pos, be, true);
+    }
+
+    public static void close(ServerLevel level, BlockPos pos, GolemEntity golem) {
+        BlockEntity be = level.getBlockEntity(pos);
+        clearStaleOpeners(level, pos, be, golem);
+        setLid(level, pos, be, false);
+        playLid(level, pos, be, false);
+    }
+
+    // undo leaked startOpen counts from older builds so the chest's own ticker cannot force the lid back open
+    private static void clearStaleOpeners(ServerLevel level, BlockPos pos, @Nullable BlockEntity be, GolemEntity golem) {
+        if (be == null) return;
+        Player p = golem.getOwner() == null ? null : level.getPlayerByUUID(golem.getOwner());
+        if (p == null && !level.players().isEmpty()) p = level.players().get(0);
+        if (p == null) return;
+        boolean looksOpen = be instanceof LidBlockEntity lid && lid.getOpenNess(1.0F) > 0.01F
+                || be instanceof BarrelBlockEntity && level.getBlockState(pos).getValue(BarrelBlock.OPEN);
+        if (!looksOpen) return;
+        for (int i = 0; i < 4; i++) {
+            if (be instanceof ChestBlockEntity c) c.stopOpen(p);
+            else if (be instanceof BarrelBlockEntity b) b.stopOpen(p);
+            else if (be instanceof ShulkerBoxBlockEntity s) s.stopOpen(p);
+            else break;
+            if (be instanceof LidBlockEntity lid && lid.getOpenNess(1.0F) <= 0.01F) break;
+            if (be instanceof BarrelBlockEntity && !level.getBlockState(pos).getValue(BarrelBlock.OPEN)) break;
+        }
+    }
+
+    private static void setLid(ServerLevel level, BlockPos pos, @Nullable BlockEntity be, boolean open) {
+        BlockState state = level.getBlockState(pos);
+        if (be instanceof BarrelBlockEntity && state.hasProperty(BarrelBlock.OPEN)) {
+            if (state.getValue(BarrelBlock.OPEN) != open) {
+                level.setBlock(pos, state.setValue(BarrelBlock.OPEN, open), Block.UPDATE_CLIENTS);
+            }
+            return;
+        }
+        // chests: block event 1 drives the lid pose (same signal openerCountChanged sends)
+        if (be instanceof ChestBlockEntity) {
+            level.blockEvent(pos, state.getBlock(), 1, open ? 1 : 0);
+        }
+    }
+
+    private static void playLid(ServerLevel level, BlockPos pos, @Nullable BlockEntity be, boolean open) {
+        if (be instanceof BarrelBlockEntity) {
+            level.playSound(null, pos, open ? SoundEvents.BARREL_OPEN : SoundEvents.BARREL_CLOSE, SoundSource.BLOCKS, 0.5F, 1.0F);
+        } else if (be instanceof ShulkerBoxBlockEntity) {
+            level.playSound(null, pos, open ? SoundEvents.SHULKER_BOX_OPEN : SoundEvents.SHULKER_BOX_CLOSE, SoundSource.BLOCKS, 0.5F, 1.0F);
+        } else {
+            level.playSound(null, pos, open ? SoundEvents.CHEST_OPEN : SoundEvents.CHEST_CLOSE, SoundSource.BLOCKS, 0.5F, 1.0F);
+        }
     }
 
     public static void pickUp(GolemEntity golem, ItemEntity item) {

@@ -86,6 +86,14 @@ def conditions(mod):
             "fabric:load_conditions": [{"condition": "fabric:all_mods_loaded", "values": [mod]}]}
 
 
+def recipe_ids():
+    ids = [f"{NS}:golem_core", f"{NS}:golem", f"{NS}:clay_cookie", f"{NS}:marker_stick"]
+    for j in JOBS:
+        ids.append(f"{NS}:{j}_golem")
+        ids.append(f"{NS}:{j}_card")
+    return ids
+
+
 def recipes():
     shaped("golem_core", ["RLR", "LEL", "RLR"], {"R": "minecraft:redstone", "L": "minecraft:lapis_lazuli", "E": "minecraft:emerald"}, "golem_core")
     body = {"B": "minecraft:clay", "C": f"{NS}:golem_core", "b": "minecraft:clay_ball"}
@@ -95,6 +103,22 @@ def recipes():
         shapeless(f"{j}_card", ["minecraft:paper", HINTS[j]], f"{j}_card", mod="exdeorum" if j in EXDEORUM else None)
     shaped("clay_cookie", ["#X#"], {"#": "minecraft:wheat", "X": "minecraft:clay_ball"}, "clay_cookie", count=4, category="food")
     shapeless("marker_stick", ["minecraft:stick", "minecraft:redstone", "minecraft:clay_ball"], "marker_stick")
+    # clay ball or marker stick unlocks every mod recipe in the vanilla book (existing worlds with a stick included)
+    write(f"{ERA}/data/simplegolems/advancement/recipes/unlock_all.json", {
+        "parent": "minecraft:recipes/root",
+        "criteria": {
+            "has_clay_ball": {
+                "trigger": "minecraft:inventory_changed",
+                "conditions": {"items": [{"items": "minecraft:clay_ball"}]}
+            },
+            "has_marker_stick": {
+                "trigger": "minecraft:inventory_changed",
+                "conditions": {"items": [{"items": f"{NS}:marker_stick"}]}
+            }
+        },
+        "requirements": [["has_clay_ball", "has_marker_stick"]],
+        "rewards": {"recipes": recipe_ids()}
+    })
 
 
 # plain blocks a miner may place for steps and to seal water and lava: no ores, valuables, block entities or falling blocks

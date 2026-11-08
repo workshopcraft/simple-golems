@@ -28,18 +28,19 @@ public class GetOffTreeGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (golem.level().isClientSide() || golem.getJob() != Job.LUMBER || !golem.onGround() || golem.isWaiting()
+        if (golem.level().isClientSide() || golem.getJob() != Job.LUMBER || !golem.onGround()
                 || golem.tickCount % 10 != 0 || !(golem.level() instanceof ServerLevel level)) return false;
+        // toolless on the canopy: still clear leaves so FetchTool can run on the ground
         BlockPos floor = golem.getOnPos();
         BlockPos base = LumberWork.baseUnder(level, floor);
-        if (base != null && golem.canHarvest(level.getBlockState(base))) {
+        if (base != null && !golem.getTool().isEmpty() && golem.canHarvest(level.getBlockState(base))) {
             target = base;
             fell = true;
             need = Config.scaled(LumberWork.INSTANCE.workTicks(golem, level, base));
         } else if (LumberWork.isTreeLeaf(level, floor)) {
             target = floor;
             fell = false;
-            need = Config.scaled(golem.digTicks(level.getBlockState(floor), floor));
+            need = Config.scaled(Math.max(8, golem.digTicks(level.getBlockState(floor), floor)));
         } else {
             return false;
         }
@@ -49,7 +50,7 @@ public class GetOffTreeGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return target != null && !golem.isWaiting() && !golem.level().getBlockState(target).isAir();
+        return target != null && !golem.level().getBlockState(target).isAir();
     }
 
     @Override

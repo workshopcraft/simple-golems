@@ -203,7 +203,7 @@ public class WorkGoal extends Goal {
     // a target above its reach that it could build steps up to
     private boolean canClimb() {
         return task == Task.WORK && work.climbWith(golem) != null && Mc.mobGriefing(level())
-                && Vec3.atCenterOf(pos).y - golem.getY() >= 4.0;
+                && Vec3.atCenterOf(pos).y - golem.getY() >= work.climbAbove();
     }
 
     private void startClimb() {
@@ -415,16 +415,18 @@ public class WorkGoal extends Goal {
             case DELIVER -> {
                 Container c = Storage.containerAt(level(), pos);
                 if (c != null) {
-                    int keep = work.keep(golem);
-                    for (int i = 0; i < GolemEntity.CARRY_SLOTS; i++) {
-                        ItemStack s = golem.getCarried().get(i);
-                        if (work.keeps(golem, i)) continue;
-                        if (i != keep) golem.getCarried().set(i, Storage.insert(c, s));
-                        else if (s.getCount() > work.reserve(golem)) s.grow(Storage.insert(c, s.split(s.getCount() - work.reserve(golem))).getCount());
-                    }
-                    golem.carriedChanged();
-                    golem.swing(InteractionHand.OFF_HAND);
-                    golem.playSound(SoundEvents.BUNDLE_DROP_CONTENTS, 0.6F, 1.3F);
+                    golem.useStorage(pos, () -> {
+                        int keep = work.keep(golem);
+                        for (int i = 0; i < GolemEntity.CARRY_SLOTS; i++) {
+                            ItemStack s = golem.getCarried().get(i);
+                            if (work.keeps(golem, i)) continue;
+                            if (i != keep) golem.getCarried().set(i, Storage.insert(c, s));
+                            else if (s.getCount() > work.reserve(golem)) s.grow(Storage.insert(c, s.split(s.getCount() - work.reserve(golem))).getCount());
+                        }
+                        golem.carriedChanged();
+                        golem.swing(InteractionHand.OFF_HAND);
+                        golem.playSound(SoundEvents.BUNDLE_DROP_CONTENTS, 0.6F, 1.3F);
+                    });
                 }
                 if (!work.load(golem).isEmpty()) skipped.put(pos, level().getGameTime() + 100);
                 task = null;
@@ -433,23 +435,25 @@ public class WorkGoal extends Goal {
                 Container c = Storage.containerAt(level(), pos);
                 Predicate<ItemStack> want = fetching != null ? fetching : work.restock(golem);
                 if (c != null && want != null) {
-                    // up to one full stack of the first kind it finds
-                    ItemStack got = ItemStack.EMPTY;
-                    int limit = Math.max(16, Config.blockReserve);
-                    for (int i = 0; i < c.getContainerSize() && got.getCount() < limit; i++) {
-                        ItemStack s = c.getItem(i);
-                        if (s.isEmpty() || !want.test(s) || !got.isEmpty() && !Mc.sameItem(got, s)) continue;
-                        ItemStack taken = c.removeItem(i, Math.min(s.getCount(), Math.min(limit, s.getMaxStackSize()) - got.getCount()));
-                        if (got.isEmpty()) got = taken;
-                        else got.grow(taken.getCount());
-                    }
-                    if (!got.isEmpty()) {
-                        golem.addCarried(got);
-                        if (!got.isEmpty()) Storage.insert(c, got);
-                        c.setChanged();
-                        golem.swing(InteractionHand.OFF_HAND);
-                        golem.playSound(SoundEvents.BUNDLE_INSERT, 0.6F, 1.2F);
-                    }
+                    golem.useStorage(pos, () -> {
+                        // up to one full stack of the first kind it finds
+                        ItemStack got = ItemStack.EMPTY;
+                        int limit = Math.max(16, Config.blockReserve);
+                        for (int i = 0; i < c.getContainerSize() && got.getCount() < limit; i++) {
+                            ItemStack s = c.getItem(i);
+                            if (s.isEmpty() || !want.test(s) || !got.isEmpty() && !Mc.sameItem(got, s)) continue;
+                            ItemStack taken = c.removeItem(i, Math.min(s.getCount(), Math.min(limit, s.getMaxStackSize()) - got.getCount()));
+                            if (got.isEmpty()) got = taken;
+                            else got.grow(taken.getCount());
+                        }
+                        if (!got.isEmpty()) {
+                            golem.addCarried(got);
+                            if (!got.isEmpty()) Storage.insert(c, got);
+                            c.setChanged();
+                            golem.swing(InteractionHand.OFF_HAND);
+                            golem.playSound(SoundEvents.BUNDLE_INSERT, 0.6F, 1.2F);
+                        }
+                    });
                 }
                 task = null;
             }
@@ -457,7 +461,7 @@ public class WorkGoal extends Goal {
                 int need = Config.scaled(work.workTicks(golem, level(), pos));
                 if (workTicks % 10 == 0) golem.swing(InteractionHand.MAIN_HAND);
                 workTicks++;
-                if (need > 20) level().destroyBlockProgress(golem.getId(), pos, workTicks * 10 / need);
+                if (need > 5) level().destroyBlockProgress(golem.getId(), pos, workTicks * 10 / need);
                 if (workTicks >= need) {
                     level().destroyBlockProgress(golem.getId(), pos, -1);
                     work.finish(golem, level(), pos);
@@ -469,7 +473,7 @@ public class WorkGoal extends Goal {
                 int need = Config.scaled(golem.digTicks(level().getBlockState(pos), pos));
                 if (workTicks % 10 == 0) golem.swing(InteractionHand.MAIN_HAND);
                 workTicks++;
-                if (need > 20) level().destroyBlockProgress(golem.getId(), pos, workTicks * 10 / need);
+                if (need > 5) level().destroyBlockProgress(golem.getId(), pos, workTicks * 10 / need);
                 if (workTicks >= need) {
                     level().destroyBlockProgress(golem.getId(), pos, -1);
                     breakStep(pos);

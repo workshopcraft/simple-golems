@@ -6,7 +6,6 @@ import com.workshopcraft.simplegolems.entity.WorkArea;
 import com.workshopcraft.simplegolems.registry.ModTags;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -43,6 +42,18 @@ public class CobblegenWork extends StationWork {
     }
 
     @Override
+    public @Nullable BlockPos approach(GolemEntity golem, ServerLevel level, BlockPos target) {
+        return standBeside(level, target);
+    }
+
+    // never stand in the generator cell (air or solid): that is what suffocates / lava-pushes them
+    @Override
+    public void keepClear(GolemEntity golem, ServerLevel level) {
+        BlockPos p = point(golem, 0);
+        if (p != null) clearSpot(golem, level, p);
+    }
+
+    @Override
     public boolean isValid(ServerLevel level, BlockPos pos) {
         return !level.getBlockState(pos).isAir();
     }
@@ -61,6 +72,7 @@ public class CobblegenWork extends StationWork {
     public void finish(GolemEntity golem, ServerLevel level, BlockPos pos) {
         ItemStack tool = golem.getTool();
         if (tool.isEmpty() || !ready(golem, level, pos)) return;
+        if (!clearSpot(golem, level, pos)) return;
         BlockState s = level.getBlockState(pos);
         var drops = Block.getDrops(s, level, pos, null, golem, tool);
         LumberWork.breakQuietly(level, pos, s, true);

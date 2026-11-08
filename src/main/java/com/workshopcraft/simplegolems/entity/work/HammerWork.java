@@ -6,12 +6,10 @@ import com.workshopcraft.simplegolems.entity.WorkArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -53,6 +51,18 @@ public class HammerWork extends StationWork {
     }
 
     @Override
+    public @Nullable BlockPos approach(GolemEntity golem, ServerLevel level, BlockPos target) {
+        BlockPos spot = point(golem, 1);
+        return spot != null && target.equals(spot) ? standBeside(level, spot) : null;
+    }
+
+    @Override
+    public void keepClear(GolemEntity golem, ServerLevel level) {
+        BlockPos spot = point(golem, 1);
+        if (spot != null) clearSpot(golem, level, spot);
+    }
+
+    @Override
     public boolean isValid(ServerLevel level, BlockPos pos) {
         return true;
     }
@@ -60,7 +70,9 @@ public class HammerWork extends StationWork {
     @Override
     public int workTicks(GolemEntity golem, ServerLevel level, BlockPos pos) {
         BlockState s = level.getBlockState(pos);
-        return pos.equals(point(golem, 1)) && !s.isAir() ? golem.digTicks(s, pos) : 6;
+        // hammers dig so fast digTicks alone looks instant; keep a visible swing + crack
+        if (pos.equals(point(golem, 1)) && !s.isAir()) return Math.max(24, golem.digTicks(s, pos));
+        return 10;
     }
 
     @Override
@@ -80,7 +92,9 @@ public class HammerWork extends StationWork {
             return;
         }
         ItemStack in = input(golem, 0);
-        if (!hammerable(golem).test(in) || golem.getBoundingBox().intersects(new AABB(spot))) return;
+        if (!hammerable(golem).test(in)) return;
+        // standing on the spot blocks placing; move beside first (old stepAside ignored same-XZ)
+        if (!clearSpot(golem, level, spot)) return;
         BlockState state = ((BlockItem) in.getItem()).getBlock().defaultBlockState();
         level.setBlockAndUpdate(spot, state);
         level.playSound(null, spot, state.getSoundType().getPlaceSound(), SoundSource.BLOCKS, 0.8F, 1.0F);

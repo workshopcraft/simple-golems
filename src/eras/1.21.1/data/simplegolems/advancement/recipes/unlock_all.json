@@ -1,0 +1,71 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_clay_ball": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "minecraft:clay_ball"
+          }
+        ]
+      }
+    },
+    "has_marker_stick": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "simplegolems:marker_stick"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_clay_ball",
+      "has_marker_stick"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "simplegolems:golem_core",
+      "simplegolems:golem",
+      "simplegolems:clay_cookie",
+      "simplegolems:marker_stick",
+      "simplegolems:lumber_golem",
+      "simplegolems:lumber_card",
+      "simplegolems:farmer_golem",
+      "simplegolems:farmer_card",
+      "simplegolems:miner_golem",
+      "simplegolems:miner_card",
+      "simplegolems:courier_golem",
+      "simplegolems:courier_card",
+      "simplegolems:sweeper_golem",
+      "simplegolems:sweeper_card",
+      "simplegolems:cobblegen_golem",
+      "simplegolems:cobblegen_card",
+      "simplegolems:sifter_golem",
+      "simplegolems:sifter_card",
+      "simplegolems:hammer_golem",
+      "simplegolems:hammer_card",
+      "simplegolems:shepherd_golem",
+      "simplegolems:shepherd_card",
+      "simplegolems:rancher_golem",
+      "simplegolems:rancher_card",
+      "simplegolems:composter_golem",
+      "simplegolems:composter_card",
+      "simplegolems:smelter_golem",
+      "simplegolems:smelter_card",
+      "simplegolems:beekeeper_golem",
+      "simplegolems:beekeeper_card",
+      "simplegolems:fisher_golem",
+      "simplegolems:fisher_card",
+      "simplegolems:lamplighter_golem",
+      "simplegolems:lamplighter_card",
+      "simplegolems:guard_golem",
+      "simplegolems:guard_card"
+    ]
+  }
+}

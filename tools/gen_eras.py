@@ -75,12 +75,40 @@ def pack(out):
 
 
 R = f"{NEW}/data/{MOD}/recipe"
+A = f"{NEW}/data/{MOD}/advancement"
 T = f"{SRC}/data/{MOD}/tags"
+
+
+def item_pred_120(items):
+    # 1.20 wants an array of item ids inside each predicate
+    if isinstance(items, str):
+        return {"items": [items]}
+    return {"items": items}
+
+
+def advancement_120(adv):
+    adv = dict(adv)
+    criteria = {}
+    for key, c in adv["criteria"].items():
+        c = dict(c)
+        cond = dict(c.get("conditions", {}))
+        if "items" in cond:
+            cond["items"] = [item_pred_120(p.get("items") if isinstance(p, dict) else p) for p in cond["items"]]
+        c["conditions"] = cond
+        criteria[key] = c
+    adv["criteria"] = criteria
+    return adv
+
 
 OUT = "src/eras/1.20.1"
 shutil.rmtree(OUT, ignore_errors=True)
 for f in sorted(os.listdir(R)):
     write(f"{OUT}/data/{MOD}/recipes/{f}", recipe(json.load(open(f"{R}/{f}"))))
+for dirpath, _, files in os.walk(A):
+    for f in files:
+        src = os.path.join(dirpath, f)
+        rel = os.path.relpath(src, A).replace("\\", "/")
+        write(f"{OUT}/data/{MOD}/advancements/{rel}", advancement_120(json.load(open(src))))
 for kind, plural in [("block", "blocks"), ("item", "items"), ("entity_type", "entity_types")]:
     for f in sorted(os.listdir(f"{T}/{kind}")):
         write(f"{OUT}/data/{MOD}/tags/{plural}/{f}", json.load(open(f"{T}/{kind}/{f}")))
@@ -91,5 +119,10 @@ OUT = "src/eras/1.21.1"
 shutil.rmtree(OUT, ignore_errors=True)
 for f in sorted(os.listdir(R)):
     write(f"{OUT}/data/{MOD}/recipe/{f}", recipe_121(json.load(open(f"{R}/{f}"))))
+for dirpath, _, files in os.walk(A):
+    for f in files:
+        src = os.path.join(dirpath, f)
+        rel = os.path.relpath(src, A).replace("\\", "/")
+        write(f"{OUT}/data/{MOD}/advancement/{rel}", json.load(open(src)))
 golem_models(OUT)
 pack(OUT)
