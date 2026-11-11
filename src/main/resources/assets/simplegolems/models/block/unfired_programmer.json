@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "simplegolems:block/unfired_programmer_top",
+    "bottom": "simplegolems:block/unfired_programmer_bottom",
+    "front": "simplegolems:block/unfired_programmer_front",
+    "side": "simplegolems:block/unfired_programmer_side"
+  }
+}

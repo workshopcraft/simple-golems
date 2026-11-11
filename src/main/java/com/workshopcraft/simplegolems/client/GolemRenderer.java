@@ -37,6 +37,8 @@ public class GolemRenderer extends MobRenderer<GolemEntity, GolemRenderState, Go
     private static final Identifier TINT = SimpleGolems.id("textures/entity/golem/golem_tint.png");
     private static final Identifier OVERLAY = SimpleGolems.id("textures/entity/golem/golem_overlay.png");
     private static final Identifier GLOW = SimpleGolems.id("textures/entity/golem/golem_glow.png");
+    private static final Identifier OVERLAY_AUG = SimpleGolems.id("textures/entity/golem/golem_overlay_augmented.png");
+    private static final Identifier GLOW_AUG = SimpleGolems.id("textures/entity/golem/golem_glow_augmented.png");
     private static final float TILT = 17.0F * Mth.DEG_TO_RAD;
 
     //? if >=1.21.2 {
@@ -46,13 +48,14 @@ public class GolemRenderer extends MobRenderer<GolemEntity, GolemRenderState, Go
         addLayer(new RenderLayer<>(this) {
             @Override
             public void submit(PoseStack pose, SubmitNodeCollector out, int light, GolemRenderState state, float yRot, float xRot) {
-                coloredCutoutModelCopyLayerRender(getParentModel(), OVERLAY, pose, out, light, state, -1, 1);
+                Identifier overlay = state.augmented ? OVERLAY_AUG : OVERLAY;
+                coloredCutoutModelCopyLayerRender(getParentModel(), overlay, pose, out, light, state, -1, 1);
                 if (state.job != Job.BLANK) {
-                    coloredCutoutModelCopyLayerRender(cardModel, OVERLAY, pose, out, light, state, ARGB.opaque(state.job.colour), 1);
+                    coloredCutoutModelCopyLayerRender(cardModel, overlay, pose, out, light, state, ARGB.opaque(state.job.colour), 1);
                 }
             }
         });
-        addLayer(new LivingEntityEmissiveLayer<>(this, s -> GLOW, (s, age) -> s.powered ? 1.0F : 0.3F,
+        addLayer(new LivingEntityEmissiveLayer<>(this, s -> s.augmented ? GLOW_AUG : GLOW, (s, age) -> s.powered ? 1.0F : 0.3F,
                 new GolemModel(context.bakeLayer(LAYER), GolemModel.Pass.BODY), RenderTypes::eyes, false));
         addLayer(new RenderLayer<>(this) {
             @Override
@@ -102,6 +105,7 @@ public class GolemRenderer extends MobRenderer<GolemEntity, GolemRenderState, Go
         state.powered = golem.isPowered();
         state.waiting = golem.isWaiting();
         state.downed = golem.isDowned();
+        state.augmented = golem.isAugmented();
         itemModelResolver.updateForLiving(state.carried, golem.getShownCarried(), ItemDisplayContext.GROUND, golem);
         state.carrying = !state.carried.isEmpty();
         state.trouble = golem.shownTrouble;
@@ -155,16 +159,17 @@ public class GolemRenderer extends MobRenderer<GolemEntity, GolemRenderState, Go
             @Override
             public void render(PoseStack pose, MultiBufferSource buffers, int light, GolemEntity golem, float limb, float limbSpeed, float partial, float age, float yRot, float xRot) {
                 Job job = golem.getJob();
+                Identifier overlay = golem.isAugmented() ? OVERLAY_AUG : OVERLAY;
                 //? if >=1.21 {
-                renderColoredCutoutModel(getParentModel(), OVERLAY, pose, buffers, light, golem, -1);
+                renderColoredCutoutModel(getParentModel(), overlay, pose, buffers, light, golem, -1);
                 if (job != Job.BLANK) {
-                    coloredCutoutModelCopyLayerRender(getParentModel(), cardModel, OVERLAY, pose, buffers, light, golem, limb, limbSpeed, age, yRot, xRot, partial,
+                    coloredCutoutModelCopyLayerRender(getParentModel(), cardModel, overlay, pose, buffers, light, golem, limb, limbSpeed, age, yRot, xRot, partial,
                             0xFF000000 | job.colour);
                 }
                 //?} else {
                 /^renderColoredCutoutModel(getParentModel(), OVERLAY, pose, buffers, light, golem, 1.0F, 1.0F, 1.0F);
                 if (job != Job.BLANK) {
-                    coloredCutoutModelCopyLayerRender(getParentModel(), cardModel, OVERLAY, pose, buffers, light, golem, limb, limbSpeed, age, yRot, xRot, partial,
+                    coloredCutoutModelCopyLayerRender(getParentModel(), cardModel, overlay, pose, buffers, light, golem, limb, limbSpeed, age, yRot, xRot, partial,
                             (job.colour >> 16 & 255) / 255.0F, (job.colour >> 8 & 255) / 255.0F, (job.colour & 255) / 255.0F);
                 }
                 ^///?}
@@ -180,9 +185,9 @@ public class GolemRenderer extends MobRenderer<GolemEntity, GolemRenderState, Go
                 float f = golem.isPowered() ? 1.0F : 0.3F;
                 //? if >=1.21 {
                 int g = (int) (f * 255);
-                glowModel.renderToBuffer(pose, buffers.getBuffer(RenderType.eyes(GLOW)), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0xFF000000 | g << 16 | g << 8 | g);
+                glowModel.renderToBuffer(pose, buffers.getBuffer(RenderType.eyes(golem.isAugmented() ? GLOW_AUG : GLOW)), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0xFF000000 | g << 16 | g << 8 | g);
                 //?} else {
-                /^glowModel.renderToBuffer(pose, buffers.getBuffer(RenderType.eyes(GLOW)), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, f, f, f, 1.0F);
+                /^glowModel.renderToBuffer(pose, buffers.getBuffer(RenderType.eyes(golem.isAugmented() ? GLOW_AUG : GLOW)), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, f, f, f, 1.0F);
                 ^///?}
             }
         });

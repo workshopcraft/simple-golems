@@ -33,6 +33,7 @@ public final class Config {
     public static String guardCreepers = "hit_and_back_off";
     public static int guardDownTime = 60;
     public static int guardCookieHeal = 8;
+    public static boolean enablePrograms = true;
 
     public static final List<String> JOBS = List.of("lumber", "farmer", "miner", "courier", "sweeper");
     // a list of their own, so a 1.0.0 config without them leaves every program on
@@ -93,6 +94,7 @@ public final class Config {
             guardCreepers = CREEPER_MODES.contains(creepers) ? creepers : "hit_and_back_off";
             guardDownTime = clamp(intOf(v, "guardDownTime", 60), 5, 600);
             guardCookieHeal = clamp(intOf(v, "guardCookieHeal", 8), 1, 200);
+            enablePrograms = !"false".equals(v.get("enablePrograms"));
             addMissing(file, v);
             enabledJobs = EnumSet.allOf(Job.class);
             list(v, "enabledJobs", JOBS);

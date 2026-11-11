@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "bGb",
+    "BCB",
+    "BBB"
+  ],
+  "key": {
+    "b": "minecraft:stone_button",
+    "G": "minecraft:glass_pane",
+    "B": "minecraft:clay",
+    "C": "simplegolems:golem_core"
+  },
+  "result": {
+    "id": "simplegolems:unfired_programmer",
+    "count": 1
+  }
+}

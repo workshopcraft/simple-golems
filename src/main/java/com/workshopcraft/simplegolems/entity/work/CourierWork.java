@@ -1,6 +1,7 @@
 package com.workshopcraft.simplegolems.entity.work;
 
 import com.workshopcraft.simplegolems.entity.GolemEntity;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import com.workshopcraft.simplegolems.entity.WorkArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -36,10 +37,16 @@ public class CourierWork implements JobWork {
         return from != null && to != null && !sameContainer(level, from, to);
     }
 
-    private static int slotToMove(Container from, Container to) {
+    private static boolean allowed(GolemEntity golem, ItemStack stack) {
+        GolemProgram p = golem.activeProgram();
+        if (p == null || p.kind() != GolemProgram.Kind.COURIER_FILTER) return true;
+        return p.matches(stack);
+    }
+
+    private static int slotToMove(Container from, Container to, GolemEntity golem) {
         for (int i = 0; i < from.getContainerSize(); i++) {
             ItemStack s = from.getItem(i);
-            if (!s.isEmpty() && Storage.hasRoom(to, s)) return i;
+            if (!s.isEmpty() && allowed(golem, s) && Storage.hasRoom(to, s)) return i;
         }
         return -1;
     }
@@ -55,7 +62,7 @@ public class CourierWork implements JobWork {
         BlockPos from = source(level, area), to = destination(level, area);
         if (from == null || to == null || skip.test(from) || sameContainer(level, from, to)) return null;
         Container src = Storage.containerAt(level, from), dst = Storage.containerAt(level, to);
-        return src != null && dst != null && slotToMove(src, dst) >= 0 ? from : null;
+        return src != null && dst != null && slotToMove(src, dst, golem) >= 0 ? from : null;
     }
 
     @Override
@@ -76,7 +83,7 @@ public class CourierWork implements JobWork {
         if (src == null || dst == null || !golem.carryEmpty()) return;
         // up to one stack per carry slot each trip
         for (int n = 0; n < GolemEntity.CARRY_SLOTS; n++) {
-            int slot = slotToMove(src, dst);
+            int slot = slotToMove(src, dst, golem);
             if (slot < 0) break;
             ItemStack s = src.getItem(slot);
             golem.setCarried(n, src.removeItem(slot, Math.min(s.getCount(), s.getMaxStackSize())));

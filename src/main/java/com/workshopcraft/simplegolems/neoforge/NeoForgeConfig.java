@@ -27,6 +27,7 @@ final class NeoForgeConfig {
     private static final ModConfigSpec.ConfigValue<String> GUARD_CREEPERS;
     private static final ModConfigSpec.IntValue GUARD_DOWN;
     private static final ModConfigSpec.IntValue GUARD_HEAL;
+    private static final ModConfigSpec.BooleanValue ENABLE_PROGRAMS;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -51,6 +52,7 @@ final class NeoForgeConfig {
                 .define("guardCreepers", "hit_and_back_off", o -> o instanceof String s && Config.CREEPER_MODES.contains(s));
         GUARD_DOWN = b.comment("Seconds a guard stays down when its health runs out (5 to 600)").defineInRange("guardDownTime", 60, 5, 600);
         GUARD_HEAL = b.comment("Health a guard gets back from eating a clay cookie after a fight").defineInRange("guardCookieHeal", 8, 1, 200);
+        ENABLE_PROGRAMS = b.comment("Let augmented golems use program cards. When off, programs are ignored").define("enablePrograms", true);
         SPEC = b.build();
     }
 
@@ -75,6 +77,7 @@ final class NeoForgeConfig {
         Config.guardCreepers = GUARD_CREEPERS.get();
         Config.guardDownTime = GUARD_DOWN.get();
         Config.guardCookieHeal = GUARD_HEAL.get();
+        Config.enablePrograms = ENABLE_PROGRAMS.get();
     }
 }
 *///?}

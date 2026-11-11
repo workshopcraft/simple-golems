@@ -46,11 +46,11 @@ def plain(name):
 
 
 def items():
-    simple = ["golem_core", "clay_cookie", "marker_stick"] + [f"{j}_card" for j in JOBS]
+    simple = ["golem_core", "augmented_golem_core", "clay_cookie", "marker_stick", "program_card"] + [f"{j}_card" for j in JOBS]
     for n in simple:
         flat_model(n)
         write(f"{ERA}/assets/simplegolems/items/{n}.json", {"model": plain(n)})
-    for n in ["golem_body", "golem_face"] + [f"golem_accent_{j}" for j in JOBS]:
+    for n in ["golem_body", "golem_face", "golem_face_augmented"] + [f"golem_accent_{j}" for j in JOBS]:
         flat_model(n)
 
     def body(colour):
@@ -59,10 +59,16 @@ def items():
     write(f"{ERA}/assets/simplegolems/items/golem.json", {"model": {"type": "minecraft:composite", "models": [
         {"type": "minecraft:select", "property": "minecraft:component", "component": f"{NS}:colour",
          "cases": [{"when": c, "model": body(DYES[i])} for i, c in enumerate(COLOURS)], "fallback": body(UNDYED)},
-        plain("golem_face"),
+        {"type": "minecraft:select", "property": "minecraft:component", "component": f"{NS}:augmented",
+         "cases": [{"when": True, "model": plain("golem_face_augmented")}], "fallback": plain("golem_face")},
         {"type": "minecraft:select", "property": "minecraft:component", "component": f"{NS}:job",
          "cases": [{"when": j, "model": plain(f"golem_accent_{j}")} for j in JOBS],
          "fallback": {"type": "minecraft:empty"}}]}})
+    for n, model in (("unfired_programmer", "block/unfired_programmer"), ("programmer", "block/programmer")):
+        write(f"{ERA}/assets/simplegolems/items/{n}.json", {"model": {"type": "minecraft:model", "model": f"{NS}:{model}"}})
+    # 1.20 / 1.21 item models that parent the block
+    for n, model in (("unfired_programmer", "block/unfired_programmer"), ("programmer", "block/programmer")):
+        write(f"{ASSETS}/models/item/{n}.json", {"parent": f"{NS}:{model}"})
 
 
 def shaped(name, pattern, key, result, count=1, components=None, category="misc"):
@@ -87,7 +93,7 @@ def conditions(mod):
 
 
 def recipe_ids():
-    ids = [f"{NS}:golem_core", f"{NS}:golem", f"{NS}:clay_cookie", f"{NS}:marker_stick"]
+    ids = [f"{NS}:golem_core", f"{NS}:augmented_golem_core", f"{NS}:golem", f"{NS}:clay_cookie", f"{NS}:marker_stick", f"{NS}:program_card", f"{NS}:unfired_programmer", f"{NS}:programmer"]
     for j in JOBS:
         ids.append(f"{NS}:{j}_golem")
         ids.append(f"{NS}:{j}_card")
@@ -96,6 +102,18 @@ def recipe_ids():
 
 def recipes():
     shaped("golem_core", ["RLR", "LEL", "RLR"], {"R": "minecraft:redstone", "L": "minecraft:lapis_lazuli", "E": "minecraft:emerald"}, "golem_core")
+    # same layout as the original core: corners, edges, centre
+    shaped("augmented_golem_core", ["AQA", "QDQ", "AQA"],
+           {"A": "minecraft:amethyst_shard", "Q": "minecraft:quartz", "D": "minecraft:diamond"}, "augmented_golem_core")
+    shapeless("program_card", ["minecraft:paper", "minecraft:clay_ball", "minecraft:ink_sac"], "program_card")
+    # unfired clay programmer, then smelted in a furnace to get the working block
+    shaped("unfired_programmer", ["bGb", "BCB", "BBB"],
+           {"b": "minecraft:stone_button", "G": "minecraft:glass_pane", "B": "minecraft:clay", "C": f"{NS}:golem_core"},
+           "unfired_programmer")
+    write(f"{ERA}/data/simplegolems/recipe/programmer.json", {
+        "type": "minecraft:smelting", "category": "blocks", "cookingtime": 200, "experience": 0.3,
+        "ingredient": f"{NS}:unfired_programmer", "result": {"id": f"{NS}:programmer"}
+    })
     body = {"B": "minecraft:clay", "C": f"{NS}:golem_core", "b": "minecraft:clay_ball"}
     shaped("golem", [" B ", "BCB", "b b"], body, "golem")
     for j in JOBS:

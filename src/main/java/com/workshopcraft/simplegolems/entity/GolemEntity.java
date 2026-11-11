@@ -4,6 +4,7 @@ import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.registry.ModTags;
 import com.workshopcraft.simplegolems.Config;
 import com.workshopcraft.simplegolems.item.GolemSettings;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import com.workshopcraft.simplegolems.item.ItemData;
 import com.workshopcraft.simplegolems.item.GolemItem;
 import com.workshopcraft.simplegolems.entity.goal.EscapeHazardGoal;
@@ -113,6 +114,7 @@ public class GolemEntity extends AbstractGolem {
     private static final EntityDataAccessor<Integer> DATA_COOKIES = SynchedEntityData.defineId(GolemEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_TROUBLE = SynchedEntityData.defineId(GolemEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> DATA_DOWNED = SynchedEntityData.defineId(GolemEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> DATA_AUGMENTED = SynchedEntityData.defineId(GolemEntity.class, EntityDataSerializers.BOOLEAN);
     //? if >=1.21 {
     private static final Identifier GUARD_HEALTH = SimpleGolems.id("guard_health");
     //?} else {
@@ -122,6 +124,7 @@ public class GolemEntity extends AbstractGolem {
     public static final double FOLLOW_GUARD_RANGE = 10.0;
 
     private ItemStack cookies = ItemStack.EMPTY;
+    private ItemStack programCard = ItemStack.EMPTY;
     public static final int CARRY_SLOTS = 4;
     private final NonNullList<ItemStack> carried = NonNullList.withSize(CARRY_SLOTS, ItemStack.EMPTY);
     private int fuel;
@@ -209,6 +212,7 @@ public class GolemEntity extends AbstractGolem {
         b.define(DATA_COOKIES, 0);
         b.define(DATA_CARRIED, ItemStack.EMPTY);
         b.define(DATA_DOWNED, false);
+        b.define(DATA_AUGMENTED, false);
     }
 
     public Job getJob() {
@@ -223,6 +227,28 @@ public class GolemEntity extends AbstractGolem {
             entityData.set(DATA_DOWNED, false);
         }
         applyJobHealth();
+    }
+
+    public boolean isAugmented() {
+        return entityData.get(DATA_AUGMENTED);
+    }
+
+    public void setAugmented(boolean v) {
+        entityData.set(DATA_AUGMENTED, v);
+    }
+
+    public ItemStack getProgramCard() {
+        return programCard;
+    }
+
+    public void setProgramCard(ItemStack stack) {
+        programCard = stack.isEmpty() ? ItemStack.EMPTY : stack.copy();
+    }
+
+    // the written program, or null when programs are off, the golem is not augmented, or the card is blank
+    public GolemProgram activeProgram() {
+        if (!com.workshopcraft.simplegolems.Config.enablePrograms || !isAugmented()) return null;
+        return com.workshopcraft.simplegolems.item.ProgramCardItem.program(programCard);
     }
 
     // a guard has more health than a worker; the modifier is saved with the attributes
@@ -846,6 +872,9 @@ public class GolemEntity extends AbstractGolem {
         fuel = s.fuel();
         customArea = s.area().orElse(null);
         points = List.copyOf(s.points());
+        setAugmented(Boolean.TRUE.equals(ItemData.getOrDefault(stack, ModContent.AUGMENTED, false)));
+        ItemStack card = ItemData.get(stack, ModContent.PROGRAM_CARD);
+        programCard = card == null ? ItemStack.EMPTY : card.copy();
         updatePowered();
     }
 
@@ -857,6 +886,8 @@ public class GolemEntity extends AbstractGolem {
         for (ItemStack c : carried) items.add(c.copy());
         ItemData.setItems(stack, items);
         ItemData.set(stack, ModContent.SETTINGS, new GolemSettings(fuel, Optional.ofNullable(customArea), points));
+        if (isAugmented()) ItemData.set(stack, ModContent.AUGMENTED, true);
+        if (!programCard.isEmpty()) ItemData.set(stack, ModContent.PROGRAM_CARD, programCard.copy());
         //? if >=1.20.5 {
         if (hasCustomName()) stack.set(DataComponents.CUSTOM_NAME, getCustomName());
         //?} else {
@@ -931,14 +962,37 @@ public class GolemEntity extends AbstractGolem {
         }
 
         if (held.is(Items.STICK) && player.isSecondaryUseActive()) {
-            if (job == Job.BLANK) return InteractionResult.PASS;
+            if (job == Job.BLANK && !isAugmented()) return InteractionResult.PASS;
+            if (server) {
+                if (!canBeChangedBy(player)) {
+                    tell(player, "not_yours");
+                } else if (job != Job.BLANK) {
+                    give(player, ModContent.card(job));
+                    setJob(Job.BLANK);
+                    playSound(SoundEvents.BOOK_PAGE_TURN, 1.0F, 1.2F);
+                } else {
+                    if (!programCard.isEmpty()) {
+                        give(player, programCard);
+                        programCard = ItemStack.EMPTY;
+                    }
+                    setAugmented(false);
+                    give(player, new ItemStack(ModContent.AUGMENTED_GOLEM_CORE));
+                    playSound(SoundEvents.ITEM_FRAME_REMOVE_ITEM, 0.8F, 1.2F);
+                    tell(player, "core_removed");
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (held.is(Items.STICK) && !player.isSecondaryUseActive() && !programCard.isEmpty()) {
             if (server) {
                 if (!canBeChangedBy(player)) {
                     tell(player, "not_yours");
                 } else {
-                    give(player, ModContent.card(job));
-                    setJob(Job.BLANK);
+                    give(player, programCard);
+                    programCard = ItemStack.EMPTY;
                     playSound(SoundEvents.BOOK_PAGE_TURN, 1.0F, 1.2F);
+                    tell(player, "program_removed");
                 }
             }
             return InteractionResult.SUCCESS;
@@ -959,6 +1013,39 @@ public class GolemEntity extends AbstractGolem {
                     }
                     playSound(SoundEvents.BOOK_PAGE_TURN, 1.0F, 1.5F);
                     tell(player, "programmed", Component.translatable("job.simplegolems." + card.job.getSerializedName()));
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (held.is(ModContent.AUGMENTED_GOLEM_CORE)) {
+            if (server) {
+                if (!canBeChangedBy(player)) {
+                    tell(player, "not_yours");
+                } else if (isAugmented()) {
+                    tell(player, "already_augmented");
+                } else {
+                    setAugmented(true);
+                    Mc.consume(held, 1, player);
+                    playSound(SoundEvents.AMETHYST_BLOCK_PLACE, 0.8F, 1.3F);
+                    tell(player, "augmented");
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (held.is(ModContent.PROGRAM_CARD_ITEM)) {
+            if (server) {
+                if (!canBeChangedBy(player)) {
+                    tell(player, "not_yours");
+                } else if (!isAugmented()) {
+                    tell(player, "not_augmented");
+                } else {
+                    ItemStack old = programCard;
+                    programCard = held.split(1);
+                    give(player, old);
+                    playSound(SoundEvents.BOOK_PAGE_TURN, 1.0F, 1.4F);
+                    tell(player, "program_given");
                 }
             }
             return InteractionResult.SUCCESS;
@@ -1144,7 +1231,12 @@ public class GolemEntity extends AbstractGolem {
         } else {
             WorkArea a = getArea();
             int minutes = (fuel + cookies.getCount() * Config.cookieTicks) / 1200;
-            tell(player, "status.working", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
+            GolemProgram program = activeProgram();
+            if (job == Job.COURIER && program != null && program.kind() == GolemProgram.Kind.COURIER_FILTER && !program.isEmpty()) {
+                tell(player, "status.working_filter", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
+            } else {
+                tell(player, "status.working", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
+            }
         }
     }
 
@@ -1167,6 +1259,8 @@ public class GolemEntity extends AbstractGolem {
         if (downTicks > 0) out.putInt("downed", downTicks);
         if (kills > 0) out.putInt("kills", kills);
         if (!climbSteps.isEmpty()) out.store("climb_steps", BlockPos.CODEC.listOf(), List.copyOf(climbSteps));
+        if (isAugmented()) out.putBoolean("augmented", true);
+        if (!programCard.isEmpty()) out.store("program_card", ItemStack.OPTIONAL_CODEC, programCard);
     }
 
     @Override
@@ -1191,6 +1285,8 @@ public class GolemEntity extends AbstractGolem {
         kills = in.getIntOr("kills", 0);
         climbSteps.clear();
         climbSteps.addAll(in.read("climb_steps", BlockPos.CODEC.listOf()).orElse(List.of()));
+        setAugmented(in.getBooleanOr("augmented", false));
+        programCard = in.read("program_card", ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
         updatePowered();
     }
 
@@ -1221,6 +1317,12 @@ public class GolemEntity extends AbstractGolem {
         if (downTicks > 0) out.putInt("downed", downTicks);
         if (kills > 0) out.putInt("kills", kills);
         if (!climbSteps.isEmpty()) ItemData.put(out, "climb_steps", BlockPos.CODEC.listOf(), List.copyOf(climbSteps));
+        if (isAugmented()) out.putBoolean("augmented", true);
+        //? if >=1.20.5 {
+        if (!programCard.isEmpty()) out.put("program_card", programCard.saveOptional(registryAccess()));
+        //?} else {
+        /^if (!programCard.isEmpty()) out.put("program_card", programCard.save(new CompoundTag()));
+        ^///?}
     }
 
     @Override
@@ -1249,6 +1351,12 @@ public class GolemEntity extends AbstractGolem {
         kills = in.getInt("kills");
         climbSteps.clear();
         climbSteps.addAll(ItemData.read(in, "climb_steps", BlockPos.CODEC.listOf()).orElse(List.of()));
+        setAugmented(in.getBoolean("augmented"));
+        //? if >=1.20.5 {
+        programCard = in.contains("program_card") ? ItemData.parseStack(in.get("program_card"), registryAccess()) : ItemStack.EMPTY;
+        //?} else {
+        /^programCard = in.contains("program_card") ? ItemStack.of(in.getCompound("program_card")) : ItemStack.EMPTY;
+        ^///?}
         updatePowered();
     }
     *///?}
@@ -1262,8 +1370,11 @@ public class GolemEntity extends AbstractGolem {
         Level level = level();
     *///?}
         drop(level, new ItemStack(ModContent.GOLEM_CORE));
+        if (isAugmented()) drop(level, new ItemStack(ModContent.AUGMENTED_GOLEM_CORE));
         ItemStack card = ModContent.card(getJob());
         if (!card.isEmpty()) drop(level, card);
+        if (!programCard.isEmpty()) drop(level, programCard.copy());
+        programCard = ItemStack.EMPTY;
         for (ItemStack s : List.of(getTool(), cookies)) if (!s.isEmpty()) drop(level, s.copy());
         for (ItemStack s : carried) if (!s.isEmpty()) drop(level, s.copy());
         setTool(ItemStack.EMPTY);

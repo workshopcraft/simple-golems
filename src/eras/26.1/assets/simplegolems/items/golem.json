@@ -228,8 +228,22 @@
         }
       },
       {
-        "type": "minecraft:model",
-        "model": "simplegolems:item/golem_face"
+        "type": "minecraft:select",
+        "property": "minecraft:component",
+        "component": "simplegolems:augmented",
+        "cases": [
+          {
+            "when": true,
+            "model": {
+              "type": "minecraft:model",
+              "model": "simplegolems:item/golem_face_augmented"
+            }
+          }
+        ],
+        "fallback": {
+          "type": "minecraft:model",
+          "model": "simplegolems:item/golem_face"
+        }
       },
       {
         "type": "minecraft:select",

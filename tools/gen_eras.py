@@ -31,6 +31,8 @@ def recipe(r):
         r["key"] = {k: ing(v) for k, v in r["key"].items()}
     if "ingredients" in r:
         r["ingredients"] = [ing(v) for v in r["ingredients"]]
+    if "ingredient" in r and isinstance(r["ingredient"], str):
+        r["ingredient"] = ing(r["ingredient"])
     res = r["result"]
     out = {"item": res["id"], "count": res.get("count", 1)}
     comps = res.get("components")
@@ -49,6 +51,8 @@ def recipe_121(r):
         r["key"] = {k: ing(v) for k, v in r["key"].items()}
     if "ingredients" in r:
         r["ingredients"] = [ing(v) for v in r["ingredients"]]
+    if "ingredient" in r and isinstance(r["ingredient"], str):
+        r["ingredient"] = ing(r["ingredient"])
     return r
 
 
@@ -126,3 +130,22 @@ for dirpath, _, files in os.walk(A):
         write(f"{OUT}/data/{MOD}/advancement/{rel}", json.load(open(src)))
 golem_models(OUT)
 pack(OUT)
+
+# loot tables: 26.1 uses loot_table, older versions use loot_tables
+LOOT = f"{NEW}/data/{MOD}/loot_table"
+if os.path.isdir(LOOT):
+    for era, folder in (("src/eras/1.20.1", "loot_tables"), ("src/eras/1.21.1", "loot_tables")):
+        for dirpath, _, files in os.walk(LOOT):
+            for f in files:
+                src = os.path.join(dirpath, f)
+                rel = os.path.relpath(src, LOOT).replace("\\", "/")
+                write(f"{era}/data/{MOD}/{folder}/{rel}", json.load(open(src)))
+
+# mineable tags live next to the 26.1 files
+MINE = f"{NEW}/data/minecraft/tags/block/mineable"
+if os.path.isdir(MINE):
+    for f in os.listdir(MINE):
+        data = json.load(open(f"{MINE}/{f}"))
+        write(f"src/eras/1.21.1/data/minecraft/tags/block/mineable/{f}", data)
+        write(f"src/eras/1.20.1/data/minecraft/tags/blocks/mineable/{f}", data)
+

@@ -10,8 +10,10 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.minecraft.client.Minecraft;
+import com.workshopcraft.simplegolems.client.ProgrammerScreen;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
 //? if <1.21.4 {
 /^import com.workshopcraft.simplegolems.client.GolemItemColours;
@@ -25,6 +27,7 @@ public class SimpleGolemsNeoForgeClient {
     public SimpleGolemsNeoForgeClient(IEventBus modBus) {
         modBus.addListener((EntityRenderersEvent.RegisterLayerDefinitions e) -> e.registerLayerDefinition(GolemRenderer.LAYER, GolemMesh::create));
         modBus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(ModContent.GOLEM_ENTITY, GolemRenderer::new));
+        modBus.addListener((RegisterMenuScreensEvent e) -> e.register(ModContent.PROGRAMMER_MENU, ProgrammerScreen::new));
         //? if <1.21.4 {
         /^modBus.addListener((RegisterColorHandlersEvent.Item e) -> e.register(GolemItemColours::colour, ModContent.GOLEM));
         modBus.addListener((FMLClientSetupEvent e) -> e.enqueueWork(() ->

@@ -5,9 +5,11 @@ import com.workshopcraft.simplegolems.client.CookieHud;
 import com.workshopcraft.simplegolems.client.GolemMesh;
 import com.workshopcraft.simplegolems.client.GolemRenderer;
 import com.workshopcraft.simplegolems.registry.ModContent;
+import com.workshopcraft.simplegolems.client.ProgrammerScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
+import net.minecraft.client.gui.screens.MenuScreens;
 //? if >=1.21.2 {
 import net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry;
 //?} else {
@@ -29,6 +31,7 @@ public class SimpleGolemsFabricClient implements ClientModInitializer {
         ItemProperties.register(ModContent.GOLEM, SimpleGolems.id("job"), (stack, level, entity, seed) -> GolemItemColours.job(stack));
         *///?}
         EntityRendererRegistry.register(ModContent.GOLEM_ENTITY, GolemRenderer::new);
+        MenuScreens.register(ModContent.PROGRAMMER_MENU, ProgrammerScreen::new);
         ClientTickEvents.END_CLIENT_TICK.register(CookieHud::tick);
     }
 }

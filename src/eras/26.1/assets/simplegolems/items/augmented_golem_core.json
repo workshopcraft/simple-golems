@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "simplegolems:item/augmented_golem_core"
+  }
+}

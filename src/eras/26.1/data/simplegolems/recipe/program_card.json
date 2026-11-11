@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:paper",
+    "minecraft:clay_ball",
+    "minecraft:ink_sac"
+  ],
+  "result": {
+    "id": "simplegolems:program_card",
+    "count": 1
+  }
+}

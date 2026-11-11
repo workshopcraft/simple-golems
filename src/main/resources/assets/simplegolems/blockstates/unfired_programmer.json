@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "simplegolems:block/unfired_programmer"
+    },
+    "facing=south": {
+      "model": "simplegolems:block/unfired_programmer",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "simplegolems:block/unfired_programmer",
+      "y": 270
+    },
+    "facing=east": {
+      "model": "simplegolems:block/unfired_programmer",
+      "y": 90
+    }
+  }
+}

@@ -71,6 +71,11 @@ public class GolemItem extends Item {
             ItemData.read(old, "job", Job.CODEC).ifPresent(j -> ItemData.set(stack, ModContent.JOB, j));
             ItemData.read(old, "colour", DyeColor.CODEC).ifPresent(c -> ItemData.set(stack, ModContent.COLOUR, c));
             ItemData.read(old, "settings", GolemSettings.CODEC).ifPresent(s -> ItemData.set(stack, ModContent.SETTINGS, s));
+            ItemData.read(old, "augmented", com.mojang.serialization.Codec.BOOL).ifPresent(a -> ItemData.set(stack, ModContent.AUGMENTED, a));
+            if (old.get("program_card") instanceof CompoundTag) {
+                ItemStack card = ItemData.parseStack(old.get("program_card"), registries);
+                if (!card.isEmpty()) ItemData.set(stack, ModContent.PROGRAM_CARD, card);
+            }
             List<ItemStack> items = new ArrayList<>();
             //? if >=1.21.5 {
             for (Tag t : old.getListOrEmpty("items")) items.add(ItemData.parseStack(t, registries));
@@ -157,6 +162,9 @@ public class GolemItem extends Item {
         DyeColor colour = ItemData.get(stack, ModContent.COLOUR);
         if (colour != null) out.accept(Component.translatable("color.minecraft." + colour.getName()).withStyle(ChatFormatting.GRAY));
         GolemSettings s = ItemData.get(stack, ModContent.SETTINGS);
+        if (Boolean.TRUE.equals(ItemData.getOrDefault(stack, ModContent.AUGMENTED, false))) {
+            out.accept(Component.translatable("tooltip.simplegolems.augmented").withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
         if (s != null && s.area().isPresent()) {
             WorkArea a = s.area().get();
             out.accept(Component.translatable("tooltip.simplegolems.area", a.sizeX(), a.sizeY(), a.sizeZ()).withStyle(ChatFormatting.GRAY));

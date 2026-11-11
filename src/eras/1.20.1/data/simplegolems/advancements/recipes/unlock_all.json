@@ -35,9 +35,13 @@
   "rewards": {
     "recipes": [
       "simplegolems:golem_core",
+      "simplegolems:augmented_golem_core",
       "simplegolems:golem",
       "simplegolems:clay_cookie",
       "simplegolems:marker_stick",
+      "simplegolems:program_card",
+      "simplegolems:unfired_programmer",
+      "simplegolems:programmer",
       "simplegolems:lumber_golem",
       "simplegolems:lumber_card",
       "simplegolems:farmer_golem",
