@@ -32,6 +32,8 @@ public class ProgrammerScreen extends AbstractContainerScreen<ProgrammerMenu> {
                 .bounds(leftPos + 124, topPos + 44, 44, 18).build());
     }
 
+    private static final int LABEL = 0xFFF2E2D2;
+
     //? if >=26.1 {
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
@@ -41,9 +43,10 @@ public class ProgrammerScreen extends AbstractContainerScreen<ProgrammerMenu> {
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int xm, int ym) {
-        super.extractLabels(graphics, xm, ym);
-        graphics.text(font, Component.translatable("gui.simplegolems.programmer.card"), 16, 16, 0x404040, false);
-        graphics.text(font, Component.translatable("gui.simplegolems.programmer.copy_to"), 16, 42, 0x404040, false);
+        graphics.text(font, title, titleLabelX, titleLabelY, LABEL, false);
+        graphics.text(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY, LABEL, false);
+        graphics.text(font, Component.translatable("gui.simplegolems.programmer.card"), 16, 16, LABEL, false);
+        graphics.text(font, Component.translatable("gui.simplegolems.programmer.copy_to"), 16, 42, LABEL, false);
     }
     //?} else {
     /*@Override
@@ -53,9 +56,10 @@ public class ProgrammerScreen extends AbstractContainerScreen<ProgrammerMenu> {
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int xm, int ym) {
-        super.renderLabels(graphics, xm, ym);
-        graphics.drawString(font, Component.translatable("gui.simplegolems.programmer.card"), 16, 16, 0x404040, false);
-        graphics.drawString(font, Component.translatable("gui.simplegolems.programmer.copy_to"), 16, 42, 0x404040, false);
+        graphics.drawString(font, title, titleLabelX, titleLabelY, LABEL, false);
+        graphics.drawString(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY, LABEL, false);
+        graphics.drawString(font, Component.translatable("gui.simplegolems.programmer.card"), 16, 16, LABEL, false);
+        graphics.drawString(font, Component.translatable("gui.simplegolems.programmer.copy_to"), 16, 42, LABEL, false);
     }
     *///?}
 }
