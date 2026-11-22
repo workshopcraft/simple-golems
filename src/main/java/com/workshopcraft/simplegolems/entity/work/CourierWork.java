@@ -38,9 +38,8 @@ public class CourierWork implements JobWork {
     }
 
     private static boolean allowed(GolemEntity golem, ItemStack stack) {
-        GolemProgram p = golem.activeProgram();
-        if (p == null || p.kind() != GolemProgram.Kind.COURIER_FILTER) return true;
-        return p.matches(stack);
+        GolemProgram p = golem.program();
+        return p == null || !p.hasFilter() || p.matches(stack);
     }
 
     private static int slotToMove(Container from, Container to, GolemEntity golem) {

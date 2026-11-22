@@ -4,8 +4,11 @@ import com.workshopcraft.simplegolems.block.ProgrammerBlockEntity;
 import com.workshopcraft.simplegolems.item.GolemProgram;
 import com.workshopcraft.simplegolems.item.ProgramCardItem;
 import com.workshopcraft.simplegolems.registry.ModContent;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -24,10 +27,16 @@ public class ProgrammerMenu extends AbstractContainerMenu {
     public static final int FILTER_SLOTS = ProgrammerBlockEntity.FILTER_SLOTS;
     public static final int BTN_COPY = 0;
     public static final int BTN_CLEAR = 1;
+    public static final int BTN_JOB = 2;
+    public static final int BTN_OPTION = 3;
+    // kind, the settings, then the number of route points
+    private static final int DATA = 2 + GolemProgram.OPTIONS;
 
     private final Container cards;
     private final SimpleContainer ghosts = new SimpleContainer(FILTER_SLOTS);
     private final @Nullable ProgrammerBlockEntity programmer;
+    private final ContainerData data = new SimpleContainerData(DATA);
+    private java.util.List<BlockPos> route = java.util.List.of();
     private boolean loading;
 
     public static ProgrammerMenu client(int id, Inventory inventory) {
@@ -46,6 +55,7 @@ public class ProgrammerMenu extends AbstractContainerMenu {
         if (programmer != null) {
             for (int i = 0; i < FILTER_SLOTS; i++) ghosts.setItem(i, programmer.filterAt(i).copy());
         }
+        addDataSlots(data);
         addSlot(new CardSlot(cards, CARD_SLOT, 17, 27));
         addSlot(new CardSlot(cards, COPY_SLOT, 17, 53));
         for (int i = 0; i < FILTER_SLOTS; i++) {
@@ -75,9 +85,37 @@ public class ProgrammerMenu extends AbstractContainerMenu {
         return stack.is(ModContent.PROGRAM_CARD_ITEM);
     }
 
+    public GolemProgram.Kind kind() {
+        return GolemProgram.Kind.byId(data.get(0));
+    }
+
+    public int option(int i) {
+        return data.get(1 + i);
+    }
+
+    public int routeSize() {
+        return data.get(DATA - 1);
+    }
+
+    private GolemProgram current() {
+        java.util.List<ItemStack> list = new java.util.ArrayList<>();
+        for (int i = 0; i < FILTER_SLOTS; i++) list.add(ghosts.getItem(i).copy());
+        java.util.List<Integer> options = new java.util.ArrayList<>();
+        for (int i = 0; i < GolemProgram.OPTIONS; i++) options.add(option(i));
+        return new GolemProgram(kind(), list, options, route);
+    }
+
+    private void setRoute(java.util.List<BlockPos> r) {
+        route = r;
+        data.set(DATA - 1, r.size());
+    }
+
     private void loadFromCard() {
         loading = true;
         GolemProgram p = isCard(cards.getItem(CARD_SLOT)) ? ProgramCardItem.program(cards.getItem(CARD_SLOT)) : null;
+        if (p != null) data.set(0, p.kind().ordinal());
+        for (int i = 0; i < GolemProgram.OPTIONS; i++) data.set(1 + i, p == null ? 0 : p.option(i));
+        setRoute(p == null ? java.util.List.of() : p.route());
         for (int i = 0; i < FILTER_SLOTS; i++) {
             ItemStack s = p == null || i >= p.paddedFilter().size() ? ItemStack.EMPTY : p.paddedFilter().get(i);
             ghosts.setItem(i, s);
@@ -88,15 +126,16 @@ public class ProgrammerMenu extends AbstractContainerMenu {
 
     private void writeFilter() {
         if (loading) return;
-        java.util.List<ItemStack> list = new java.util.ArrayList<>();
         for (int i = 0; i < FILTER_SLOTS; i++) {
-            ItemStack s = ghosts.getItem(i).copy();
-            if (programmer != null) programmer.setFilter(i, s);
-            list.add(s);
+            if (programmer != null) programmer.setFilter(i, ghosts.getItem(i).copy());
         }
+        writeCard();
+    }
+
+    private void writeCard() {
         ItemStack card = cards.getItem(CARD_SLOT);
         if (!isCard(card)) return;
-        ProgramCardItem.write(card, new GolemProgram(GolemProgram.Kind.COURIER_FILTER, list));
+        ProgramCardItem.write(card, current());
         cards.setItem(CARD_SLOT, card);
     }
 
@@ -174,6 +213,8 @@ public class ProgrammerMenu extends AbstractContainerMenu {
                 if (programmer != null) programmer.setFilter(i, ItemStack.EMPTY);
             }
             loading = false;
+            for (int i = 0; i < GolemProgram.OPTIONS; i++) data.set(1 + i, 0);
+            setRoute(java.util.List.of());
             ItemStack card = cards.getItem(CARD_SLOT);
             if (isCard(card)) {
                 ProgramCardItem.write(card, null);
@@ -184,10 +225,23 @@ public class ProgrammerMenu extends AbstractContainerMenu {
         if (id == BTN_COPY) {
             ItemStack dest = cards.getItem(COPY_SLOT);
             if (!isCard(dest)) return false;
-            java.util.List<ItemStack> list = new java.util.ArrayList<>();
-            for (int i = 0; i < FILTER_SLOTS; i++) list.add(ghosts.getItem(i).copy());
-            ProgramCardItem.write(dest, new GolemProgram(GolemProgram.Kind.COURIER_FILTER, list));
+            ProgramCardItem.write(dest, current());
             cards.setItem(COPY_SLOT, dest);
+            return true;
+        }
+        if (id == BTN_JOB) {
+            data.set(0, (data.get(0) + 1) % GolemProgram.Kind.values().length);
+            for (int i = 0; i < GolemProgram.OPTIONS; i++) data.set(1 + i, 0);
+            // only a guard walks a route
+            if (kind() != GolemProgram.Kind.GUARD) setRoute(java.util.List.of());
+            writeCard();
+            return true;
+        }
+        if (id >= BTN_OPTION && id < BTN_OPTION + GolemProgram.OPTIONS) {
+            int i = id - BTN_OPTION, n = kind().choices(i);
+            if (n == 0) return false;
+            data.set(1 + i, (option(i) + 1) % n);
+            writeCard();
             return true;
         }
         return false;

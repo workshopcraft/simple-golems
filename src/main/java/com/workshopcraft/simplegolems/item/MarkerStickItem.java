@@ -70,6 +70,10 @@ public class MarkerStickItem extends Item {
 
     private static InteractionResult click(@Nullable Player player, Level level, ItemStack stack, BlockPos pos, Direction face) {
         MarkerSetup setup = ItemData.get(stack, ModContent.MARKER_SETUP);
+        if (setup == null && player != null && player.getOffhandItem().is(ModContent.PROGRAM_CARD_ITEM)) {
+            if (!level.isClientSide()) routePoint(player, level, player.getOffhandItem(), pos);
+            return InteractionResult.SUCCESS;
+        }
         if (setup == null && player != null && player.isSecondaryUseActive()) return clear(player, stack);
         if (level.isClientSide()) return InteractionResult.SUCCESS;
         if (setup != null) {
@@ -96,6 +100,35 @@ public class MarkerStickItem extends Item {
             ding(level, pos, 1.8F);
         }
         return InteractionResult.SUCCESS;
+    }
+
+    // with a program card in the other hand each click adds a patrol point for a guard; sneaking clears them
+    private static void routePoint(Player player, Level level, ItemStack card, BlockPos pos) {
+        GolemProgram p = ProgramCardItem.program(card);
+        if (p != null && p.kind() != GolemProgram.Kind.GUARD && !p.isEmpty()) {
+            tell(player, "route.not_guard");
+            return;
+        }
+        if (p == null || p.kind() != GolemProgram.Kind.GUARD) p = new GolemProgram(GolemProgram.Kind.GUARD, List.of());
+        if (player.isSecondaryUseActive()) {
+            ProgramCardItem.write(card, new GolemProgram(p.kind(), p.filter(), p.options(), List.of()));
+            tell(player, "route.cleared");
+            return;
+        }
+        if (p.route().size() >= GolemProgram.MAX_ROUTE) {
+            tell(player, "route.full", GolemProgram.MAX_ROUTE);
+            return;
+        }
+        BlockPos at = level.getBlockState(pos).canBeReplaced() ? pos : pos.above();
+        if (!p.route().isEmpty() && !WorkArea.fits(p.route().get(0), at)) {
+            tell(player, "marker.too_big", Config.maxAreaWidth);
+            return;
+        }
+        List<BlockPos> route = new ArrayList<>(p.route());
+        route.add(at.immutable());
+        ProgramCardItem.write(card, new GolemProgram(p.kind(), p.filter(), p.options(), route));
+        tell(player, "route.point", route.size(), at.getX(), at.getY(), at.getZ());
+        ding(level, at, 1.0F + 0.05F * route.size());
     }
 
     // starts a golem's setup: the next clicks are its steps, sneaking or not
@@ -206,6 +239,10 @@ public class MarkerStickItem extends Item {
     /*public void inventoryTick(ItemStack stack, Level world, Entity owner, int slot, boolean selected) {
         if (!selected || !(world instanceof ServerLevel level) || !(owner instanceof ServerPlayer player) || level.getGameTime() % 10 != 0) return;
     *///?}
+        GolemProgram route = player.getOffhandItem().is(ModContent.PROGRAM_CARD_ITEM) ? ProgramCardItem.program(player.getOffhandItem()) : null;
+        if (route != null) {
+            for (BlockPos p : route.route()) outline(level, player, WorkArea.of(p, p), DONE_COLOUR);
+        }
         MarkerCorners m = ItemData.get(stack, ModContent.MARKER);
         if (m == null) return;
         if (ItemData.has(stack, ModContent.MARKER_SETUP)) {

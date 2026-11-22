@@ -23,7 +23,7 @@ public class StrollInAreaGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (golem.getJob() == Job.BLANK || golem.isWaiting() || golem.isFollowing()) return false;
+        if (golem.getJob() == Job.BLANK || golem.isWaiting() || golem.isFollowing() || !golem.patrolRoute().isEmpty()) return false;
         WorkArea area = golem.getArea();
         if (!area.contains(golem.blockPosition())) {
             BlockPos min = area.min(), max = area.max();

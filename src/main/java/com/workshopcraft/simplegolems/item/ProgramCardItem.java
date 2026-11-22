@@ -48,6 +48,9 @@ public class ProgramCardItem extends Item {
             return;
         }
         out.accept(Component.translatable("tooltip.simplegolems.program." + p.kind().getSerializedName()).withStyle(ChatFormatting.GRAY));
+        for (int i = 0; i < p.kind().settings().size(); i++) {
+            if (p.option(i) != 0) out.accept(Component.translatable("%s: %s", settingName(p.kind(), i), valueName(p.kind(), i, p.option(i))).withStyle(ChatFormatting.DARK_GRAY));
+        }
         List<Component> names = new ArrayList<>();
         for (ItemStack s : p.filter()) {
             if (!s.isEmpty()) names.add(s.getHoverName());
@@ -55,7 +58,20 @@ public class ProgramCardItem extends Item {
         if (!names.isEmpty()) {
             Component list = names.get(0);
             for (int i = 1; i < names.size(); i++) list = Component.translatable("%s, %s", list, names.get(i));
-            out.accept(Component.translatable("tooltip.simplegolems.program.items", list).withStyle(ChatFormatting.DARK_GRAY));
+            out.accept(Component.translatable("tooltip.simplegolems.filter." + p.kind().getSerializedName(), list).withStyle(ChatFormatting.DARK_GRAY));
         }
+        if (!p.route().isEmpty()) out.accept(Component.translatable("tooltip.simplegolems.program.route", p.route().size()).withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    public static Component settingName(GolemProgram.Kind kind, int i) {
+        return Component.translatable("program.simplegolems." + kind.settings().get(i).key());
+    }
+
+    // numbers show as they are, words come from the lang file
+    public static Component valueName(GolemProgram.Kind kind, int i, int choice) {
+        GolemProgram.Setting set = kind.settings().get(i);
+        String v = set.values()[Math.floorMod(choice, set.values().length)];
+        if (v.matches("m?\\d+")) return Component.literal(v.startsWith("m") ? "-" + v.substring(1) : v);
+        return Component.translatable("program.simplegolems." + set.key() + "." + v);
     }
 }

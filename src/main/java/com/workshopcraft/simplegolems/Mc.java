@@ -10,7 +10,11 @@ import net.minecraft.world.entity.EquipmentSlot;
 import java.util.Set;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.Level;
 //? if >=1.21.9 {
 import net.minecraft.world.level.gamerules.GameRules;
@@ -132,6 +136,25 @@ public final class Mc {
         stack.consume(n, player);
         //?} else {
         /*if (!creative(player)) stack.shrink(n);
+        *///?}
+    }
+
+    public static boolean eggFor(ItemStack stack, EntityType<?> type) {
+        //? if >=26.1 {
+        return stack.getItem() instanceof SpawnEggItem && SpawnEggItem.spawnsEntity(stack, type);
+        //?} else if >=1.20.5 {
+        /*return stack.getItem() instanceof SpawnEggItem egg && egg.spawnsEntity(stack, type);
+        *///?} else {
+        /*return stack.getItem() instanceof SpawnEggItem egg && egg.spawnsEntity(stack.getTag(), type);
+        *///?}
+    }
+
+    public static @org.jspecify.annotations.Nullable DyeColor dye(ItemStack stack) {
+        if (!(stack.getItem() instanceof DyeItem d)) return null;
+        //? if >=1.21.5 {
+        return stack.get(net.minecraft.core.component.DataComponents.DYE);
+        //?} else {
+        /*return d.getDyeColor();
         *///?}
     }
 }

@@ -26,6 +26,7 @@ import java.util.Map;
 import com.workshopcraft.simplegolems.entity.work.JobWork;
 import com.workshopcraft.simplegolems.entity.work.MinerWork;
 import com.workshopcraft.simplegolems.entity.work.Storage;
+import com.workshopcraft.simplegolems.entity.goal.PatrolGoal;
 import com.workshopcraft.simplegolems.entity.goal.StrollInAreaGoal;
 import com.workshopcraft.simplegolems.entity.goal.WaitGoal;
 import com.workshopcraft.simplegolems.entity.work.CourierWork;
@@ -122,6 +123,7 @@ public class GolemEntity extends AbstractGolem {
     *///?}
     // how far from its owner a following guard looks for mobs
     public static final double FOLLOW_GUARD_RANGE = 10.0;
+    public static final double PATROL_RANGE = 6.0;
 
     private ItemStack cookies = ItemStack.EMPTY;
     private ItemStack programCard = ItemStack.EMPTY;
@@ -190,6 +192,7 @@ public class GolemEntity extends AbstractGolem {
         goalSelector.addGoal(1, new WaitGoal(this));
         goalSelector.addGoal(3, new FollowOwnerGoal(this));
         goalSelector.addGoal(4, new WorkGoal(this));
+        goalSelector.addGoal(5, new PatrolGoal(this));
         goalSelector.addGoal(6, new StrollInAreaGoal(this));
         goalSelector.addGoal(8, new LookAtPlayerGoal(this, Player.class, 6.0F));
         goalSelector.addGoal(9, new RandomLookAroundGoal(this));
@@ -251,6 +254,12 @@ public class GolemEntity extends AbstractGolem {
         return com.workshopcraft.simplegolems.item.ProgramCardItem.program(programCard);
     }
 
+    // the active program when it was written for this golem's job, or null
+    public @Nullable GolemProgram program() {
+        GolemProgram p = activeProgram();
+        return p != null && p.kind().job == getJob() ? p : null;
+    }
+
     // a guard has more health than a worker; the modifier is saved with the attributes
     private void applyJobHealth() {
         if (level().isClientSide()) return;
@@ -309,7 +318,19 @@ public class GolemEntity extends AbstractGolem {
     public AABB guardBox(double extra) {
         Player p = followedOwner();
         if (p != null) return p.getBoundingBox().inflate(FOLLOW_GUARD_RANGE + extra, 4.0 + extra / 2.0, FOLLOW_GUARD_RANGE + extra);
+        List<BlockPos> route = patrolRoute();
+        if (!route.isEmpty()) {
+            AABB box = new AABB(route.get(0));
+            for (BlockPos r : route) box = box.minmax(new AABB(r));
+            return box.inflate(PATROL_RANGE + extra, 3.0 + extra / 2.0, PATROL_RANGE + extra);
+        }
         return getArea().box(extra).inflate(0.0, 2.0, 0.0);
+    }
+
+    // a guard whose program has a route walks it instead of keeping to its area
+    public List<BlockPos> patrolRoute() {
+        GolemProgram p = getJob() == Job.GUARD && !isFollowing() ? program() : null;
+        return p == null ? List.of() : p.route();
     }
 
     public boolean canGuard() {
@@ -1231,9 +1252,9 @@ public class GolemEntity extends AbstractGolem {
         } else {
             WorkArea a = getArea();
             int minutes = (fuel + cookies.getCount() * Config.cookieTicks) / 1200;
-            GolemProgram program = activeProgram();
-            if (job == Job.COURIER && program != null && program.kind() == GolemProgram.Kind.COURIER_FILTER && !program.isEmpty()) {
-                tell(player, "status.working_filter", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
+            GolemProgram program = program();
+            if (program != null && !program.isEmpty()) {
+                tell(player, job == Job.COURIER ? "status.working_filter" : "status.working_program", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
             } else {
                 tell(player, "status.working", name, minutes, a.sizeX(), a.sizeY(), a.sizeZ());
             }

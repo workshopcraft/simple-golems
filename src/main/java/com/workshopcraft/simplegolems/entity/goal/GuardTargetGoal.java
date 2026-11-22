@@ -1,7 +1,10 @@
 package com.workshopcraft.simplegolems.entity.goal;
 
 import com.workshopcraft.simplegolems.Config;
+import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
+import com.workshopcraft.simplegolems.item.GolemProgram;
+import net.minecraft.world.item.ItemStack;
 import com.workshopcraft.simplegolems.registry.ModTags;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -54,6 +57,15 @@ public class GuardTargetGoal extends Goal {
         return !(e instanceof NeutralMob) && !(e instanceof AbstractPiglin && !(e instanceof PiglinBrute));
     }
 
+    // a spawn egg for this mob is in the program's filter
+    public static boolean listed(@Nullable GolemProgram program, LivingEntity e) {
+        if (program == null) return false;
+        for (ItemStack s : program.filter()) {
+            if (!s.isEmpty() && Mc.eggFor(s, e.getType())) return true;
+        }
+        return false;
+    }
+
     private boolean inRange(LivingEntity e, double extra) {
         return golem.guardBox(extra).intersects(e.getBoundingBox());
     }
@@ -71,9 +83,12 @@ public class GuardTargetGoal extends Goal {
         if (found != null) return true;
         if (--scan > 0) return false;
         scan = 10;
+        GolemProgram program = golem.program();
+        boolean ignore = program != null && program.is(0, "ignore");
         List<Mob> near = golem.level().getEntitiesOfClass(Mob.class, golem.guardBox(1.0),
-                e -> mayAttack(golem, e, false) && !golem.skipped(e));
-        near.sort(Comparator.comparingDouble(golem::distanceToSqr));
+                e -> mayAttack(golem, e, false) && !golem.skipped(e) && !(ignore && listed(program, e)));
+        // mobs on a priority list come first, nearest first within each
+        near.sort(Comparator.comparingInt((Mob e) -> !ignore && listed(program, e) ? 0 : 1).thenComparingDouble(golem::distanceToSqr));
         for (int i = 0; i < Math.min(3, near.size()); i++) {
             Mob e = near.get(i);
             Path p = golem.getNavigation().createPath(e, 1);
