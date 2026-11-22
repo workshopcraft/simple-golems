@@ -99,6 +99,29 @@ A guard golem keeps its area clear of hostile mobs. It has 30 health (`guardHeal
 - At 0 health it does not die but goes down for 60 seconds (`guardDownTime`). While down it sits still, mobs lose interest in it and it cannot be hurt; then it gets up with a quarter of its health. The void and `/kill` still kill it.
 - It never breaks blocks and works with `mob_griefing` off.
 
+## Program cards
+
+An augmented golem can carry a program card that changes how it does its job. Take the card out and it works as normal again.
+
+- **Augmented Golem Core**: crafted like the golem core (amethyst shards in the corners, nether quartz on the edges, a diamond in the middle). Use it on a placed golem to unlock its program slot; its core turns amethyst purple. Sneak and use a stick on a blank augmented golem to take the core back out.
+- **Program Card**: paper, a clay ball and an ink sac. Use a written card on an augmented golem to give it the program; use a stick on the golem to take the card back.
+- **Golem Programmer**: craft the Unfired Programmer (golem core in the middle, glass pane above it, stone buttons either side of the pane, clay blocks round the rest) and smelt it in a furnace. Put a card in the top slot, pick the job with the job button, set the 3x3 filter by clicking items on to it (click an empty hand on a slot to clear it) and click the setting buttons to change them. Every change is written to the card straight away. Copy writes the program on to the card in the lower slot, Clear wipes the card.
+
+A card only works on a golem with the job it was written for. What each job does with it:
+
+- **Courier**: only carries items in the filter.
+- **Guard**: spawn eggs in the filter are a list of mobs to fight first, or to leave alone with the list set to Ignore. Hold the card in your off hand and click blocks with a Marker Stick to add up to 16 patrol points (sneak click to clear them); the guard walks the points in order, pausing at each, and guards around the whole route instead of its area.
+- **Farmer**: seeds or crops in the filter are the only crops it harvests. Replant All, Half (every other spot) or None. Spare seeds go to the chest, or into a composter in the area once it carries enough to plant with. Till and plant turns grass and dirt in the area that water reaches into farmland and plants empty farmland with seeds it carries or fetches from storage.
+- **Lumber**: logs in the filter are the only trees it fells, saplings in the filter are the only ones it plants. Trees left keeps that many grown trees standing. Grid planting plants saplings every four blocks on open ground in the area.
+- **Miner**: items in the filter are the drops it keeps; Other drops Keep, Drop (left on the ground) or Void the rest. With an empty filter that means plain stone, dirt and gravel, beyond what it needs for steps. A torch in the filter makes it put torches from storage on dark floors it will not dig away. Pattern Quarry digs everything, Branch digs two high tunnels three blocks apart off a ring every four layers, Stairs digs only the staircase. Stop at Y sets how deep it goes.
+- **Rancher**: spawn eggs in the filter are the only animals it breeds; Herd cap replaces `rancherMaxAnimals`.
+- **Shepherd**: a dye in the filter makes it dye unsheared sheep that colour with dye from storage. Breed up to feeds sheep with wheat from storage until there are that many.
+- **Fisher**: Keep Fish or Treasure. Each cast rolls fish, junk or treasure with the normal weights and anything else is thrown back, so it is slower than catching everything.
+- **Smelter**: items in the filter are the only things it smelts. Fuel limit caps how much fuel it keeps in the furnace.
+- **Sweeper**: Whitelist picks up only the items in the filter, Blacklist picks up everything else.
+
+The lamplighter has no program. `enablePrograms = false` in the config makes every golem ignore its card.
+
 ## Thought bubbles
 
 A golem that cannot get on with its job shows a small thought bubble above its head:
@@ -138,6 +161,7 @@ digOut = true            # stuck golems dig their way back to their area
 moddedStorage = true     # use other mods' storage blocks
 skyblockPrograms = true  # cobblegen, sifter and hammer as a group
 rancherMaxAnimals = 8    # a rancher stops breeding a kind of animal at this many in its area (2 to 64)
+enablePrograms = true    # augmented golems follow their program cards
 ```
 
 ## Tags for data packs

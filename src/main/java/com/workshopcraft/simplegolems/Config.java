@@ -174,6 +174,8 @@ public final class Config {
                 guardDownTime = 60
                 # Health a guard gets back from eating a clay cookie after a fight
                 guardCookieHeal = 8
+                # Let augmented golems follow their program cards
+                enablePrograms = true
                 """;
     }
 }
