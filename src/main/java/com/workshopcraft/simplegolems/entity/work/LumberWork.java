@@ -4,6 +4,7 @@ import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.registry.ModTags;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
 import com.workshopcraft.simplegolems.entity.WorkArea;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -52,19 +53,47 @@ public class LumberWork implements JobWork {
         return state.is(ModTags.LOGS) && level.getBlockState(pos.below()).is(BlockTags.SUBSTRATE_OVERWORLD);
     }
 
+    // logs in the program's filter pick which trees it fells; with none, it fells every tree
+    static boolean fells(@Nullable GolemProgram p, Block log) {
+        if (p == null) return true;
+        boolean logs = false;
+        for (ItemStack f : p.filter()) {
+            if (!f.is(ModTags.LOG_ITEMS)) continue;
+            if (f.getItem() instanceof BlockItem bi && bi.getBlock() == log) return true;
+            logs = true;
+        }
+        return !logs;
+    }
+
+    // saplings in the filter pick what it plants; with none, any sapling
+    static Predicate<ItemStack> saplings(@Nullable GolemProgram p) {
+        if (p == null) return s -> true;
+        List<ItemStack> chosen = p.filter().stream().filter(f -> f.is(ModTags.SAPLINGS)).toList();
+        return s -> chosen.isEmpty() || chosen.stream().anyMatch(f -> f.is(s.getItem()));
+    }
+
+    private static boolean grid(@Nullable GolemProgram p) {
+        return p != null && p.is(1, "on");
+    }
+
     @Override
     public @Nullable BlockPos findTarget(GolemEntity golem, ServerLevel level, WorkArea area, Predicate<BlockPos> skip) {
+        GolemProgram prog = golem.program();
         List<BlockPos> bases = new ArrayList<>();
         List<BlockPos> orphans = new ArrayList<>();
         for (BlockPos p : BlockPos.betweenClosed(area.min(), area.max())) {
             BlockState s = level.getBlockState(p);
-            if (!s.is(ModTags.LOGS) || !golem.canHarvest(s) || skip.test(p)) continue;
+            if (!s.is(ModTags.LOGS) || !fells(prog, s.getBlock())) continue;
+            if (!golem.canHarvest(s) || skip.test(p)) continue;
             BlockPos imm = p.immutable();
             if (isBase(level, p, s)) bases.add(imm);
             else orphans.add(imm);
         }
         bases.sort(Comparator.comparingDouble(p -> golem.distanceToSqr(Vec3.atCenterOf(p))));
-        for (BlockPos p : bases) {
+        // a set number of grown trees is always left standing
+        int leave = prog == null ? 0 : prog.number(0, 0);
+        boolean holding = leave > 0 && trees(level, area, prog) <= leave;
+        for (BlockPos p : holding ? List.<BlockPos>of() : bases) {
             if (tree(level, p) != null) return p;
         }
         // floating leftovers after an axe broke mid-fell: retarget the lowest remaining log of that tree
@@ -75,10 +104,64 @@ public class LumberWork implements JobWork {
             Tree t = tree(level, p);
             if (t == null) continue;
             seen.addAll(t.logs());
+            if (holding && !t.bases().isEmpty()) continue;
             BlockPos lowest = t.logs().stream().min(Comparator.comparingInt(p2 -> (int) p2.getY())).orElse(p);
             if (!skip.test(lowest) && golem.canHarvest(level.getBlockState(lowest))) return lowest;
         }
-        return null;
+        return grid(prog) ? gridSpot(golem, level, area, skip) : null;
+    }
+
+    // grown trees of the kinds it fells, each counted once
+    private static int trees(ServerLevel level, WorkArea area, @Nullable GolemProgram prog) {
+        Set<BlockPos> seen = new HashSet<>();
+        int n = 0;
+        for (BlockPos p : BlockPos.betweenClosed(area.min(), area.max())) {
+            BlockState s = level.getBlockState(p);
+            if (seen.contains(p) || !s.is(ModTags.LOGS) || !fells(prog, s.getBlock()) || !isBase(level, p, s)) continue;
+            Tree t = tree(level, p.immutable());
+            if (t == null) continue;
+            seen.addAll(t.logs());
+            n++;
+        }
+        return n;
+    }
+
+    private static final int GRID = 4;
+
+    // ground on the planting grid with room for a tree, when it has a sapling to hand or in storage
+    private static @Nullable BlockPos gridSpot(GolemEntity golem, ServerLevel level, WorkArea area, Predicate<BlockPos> skip) {
+        Predicate<ItemStack> ok = saplings(golem.program());
+        boolean have = golem.carries(s -> s.is(ModTags.SAPLINGS) && ok.test(s))
+                || Storage.nearest(level, area, golem.position(), c -> c.hasAnyMatching(s -> s.is(ModTags.SAPLINGS) && ok.test(s)), skip) != null;
+        if (!have) return null;
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (int x = area.min().getX(); x <= area.max().getX(); x++) {
+            for (int z = area.min().getZ(); z <= area.max().getZ(); z++) {
+                if (Math.floorMod(x - area.min().getX() - GRID / 2, GRID) != 0 || Math.floorMod(z - area.min().getZ() - GRID / 2, GRID) != 0) continue;
+                for (int y = area.max().getY(); y >= area.min().getY(); y--) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    if (!isGridSpot(level, p)) continue;
+                    double d = golem.distanceToSqr(Vec3.atCenterOf(p));
+                    if (!skip.test(p) && d < bestDist) {
+                        best = p;
+                        bestDist = d;
+                    }
+                    break;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static boolean isGridSpot(ServerLevel level, BlockPos p) {
+        BlockState s = level.getBlockState(p);
+        if (!s.canBeReplaced() || !s.getFluidState().isEmpty() || !level.getBlockState(p.below()).is(BlockTags.SUBSTRATE_OVERWORLD)) return false;
+        for (BlockPos n : BlockPos.betweenClosed(p.offset(-1, 0, -1), p.offset(1, 1, 1))) {
+            BlockState ns = level.getBlockState(n);
+            if (ns.is(ModTags.LOGS) || ns.is(BlockTags.SAPLINGS)) return false;
+        }
+        return true;
     }
 
     // a grown tree has natural leaves touching its logs; log cabins and stripped builds are left alone
@@ -198,7 +281,13 @@ public class LumberWork implements JobWork {
     }
 
     @Override
+    public boolean isValid(GolemEntity golem, ServerLevel level, BlockPos pos) {
+        return isValid(level, pos) || grid(golem.program()) && isGridSpot(level, pos);
+    }
+
+    @Override
     public int workTicks(GolemEntity golem, ServerLevel level, BlockPos pos) {
+        if (!isValid(level, pos)) return 10;
         Tree tree = tree(level, pos);
         int logs = tree == null ? 1 : tree.logs().size();
         return Math.min(200, golem.digTicks(level.getBlockState(pos), pos) * (1 + logs / 4));
@@ -212,6 +301,13 @@ public class LumberWork implements JobWork {
 
     @Override
     public void finish(GolemEntity golem, ServerLevel level, BlockPos pos) {
+        if (!isValid(level, pos)) {
+            if (grid(golem.program()) && isGridSpot(level, pos)) {
+                if (!level.getBlockState(pos).isAir()) level.destroyBlock(pos, true);
+                replant(golem, level, pos, new ArrayList<>());
+            }
+            return;
+        }
         Tree tree = tree(level, pos);
         if (tree == null) return;
         ItemStack axe = golem.getTool();
@@ -245,23 +341,24 @@ public class LumberWork implements JobWork {
     }
 
     private static boolean replant(GolemEntity golem, ServerLevel level, BlockPos base, List<ItemStack> drops) {
-        if (plant(level, base, drops)) return true;
+        Predicate<ItemStack> pick = saplings(golem.program());
+        if (plant(level, base, drops, pick)) return true;
         List<ItemEntity> near = level.getEntitiesOfClass(ItemEntity.class, new AABB(base).inflate(3), e -> e.isAlive() && e.getItem().is(ModTags.SAPLINGS));
-        if (near.stream().anyMatch(e -> plantFrom(level, base, e))) return true;
-        if (plant(level, base, golem.getCarried())) {
+        if (near.stream().anyMatch(e -> plantFrom(level, base, e, pick))) return true;
+        if (plant(level, base, golem.getCarried(), pick)) {
             golem.carriedChanged();
             return true;
         }
         // nothing dropped, so borrow a sapling from storage in the area
-        BlockPos chest = Storage.nearest(level, golem.getArea(), golem.position(), c -> saplingSlot(c, level, base) >= 0, p -> false);
+        BlockPos chest = Storage.nearest(level, golem.getArea(), golem.position(), c -> saplingSlot(c, level, base, pick) >= 0, p -> false);
         Container c = chest == null ? null : Storage.containerAt(level, chest);
         if (c == null) return false;
-        int slot = saplingSlot(c, level, base);
+        int slot = saplingSlot(c, level, base, pick);
         if (slot < 0) return false;
         boolean[] ok = {false};
         golem.useStorage(chest, () -> {
             ItemStack one = c.removeItem(slot, 1);
-            plant(level, base, List.of(one));
+            plant(level, base, List.of(one), pick);
             if (!one.isEmpty()) Storage.insert(c, one);
             c.setChanged();
             ok[0] = true;
@@ -269,15 +366,15 @@ public class LumberWork implements JobWork {
         return ok[0];
     }
 
-    private static @Nullable BlockState saplingFor(ItemStack stack, ServerLevel level, BlockPos pos) {
-        if (stack.isEmpty() || !stack.is(ModTags.SAPLINGS) || !(stack.getItem() instanceof BlockItem bi)) return null;
+    private static @Nullable BlockState saplingFor(ItemStack stack, ServerLevel level, BlockPos pos, Predicate<ItemStack> pick) {
+        if (stack.isEmpty() || !stack.is(ModTags.SAPLINGS) || !pick.test(stack) || !(stack.getItem() instanceof BlockItem bi)) return null;
         BlockState sapling = bi.getBlock().defaultBlockState();
         return sapling.canSurvive(level, pos) ? sapling : null;
     }
 
-    private static boolean plant(ServerLevel level, BlockPos pos, List<ItemStack> stacks) {
+    private static boolean plant(ServerLevel level, BlockPos pos, List<ItemStack> stacks, Predicate<ItemStack> pick) {
         for (ItemStack s : stacks) {
-            BlockState sapling = saplingFor(s, level, pos);
+            BlockState sapling = saplingFor(s, level, pos, pick);
             if (sapling != null) {
                 level.setBlockAndUpdate(pos, sapling);
                 s.shrink(1);
@@ -287,17 +384,17 @@ public class LumberWork implements JobWork {
         return false;
     }
 
-    private static boolean plantFrom(ServerLevel level, BlockPos pos, ItemEntity e) {
+    private static boolean plantFrom(ServerLevel level, BlockPos pos, ItemEntity e, Predicate<ItemStack> pick) {
         ItemStack s = e.getItem().copy();
-        if (!plant(level, pos, List.of(s))) return false;
+        if (!plant(level, pos, List.of(s), pick)) return false;
         if (s.isEmpty()) e.discard();
         else e.setItem(s);
         return true;
     }
 
-    private static int saplingSlot(Container c, ServerLevel level, BlockPos pos) {
+    private static int saplingSlot(Container c, ServerLevel level, BlockPos pos, Predicate<ItemStack> pick) {
         for (int i = 0; i < c.getContainerSize(); i++) {
-            if (saplingFor(c.getItem(i), level, pos) != null) return i;
+            if (saplingFor(c.getItem(i), level, pos, pick) != null) return i;
         }
         return -1;
     }
