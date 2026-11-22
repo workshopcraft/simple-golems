@@ -3,6 +3,7 @@ package com.workshopcraft.simplegolems.entity.work;
 import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
 import com.workshopcraft.simplegolems.entity.WorkArea;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
@@ -28,6 +29,7 @@ public class FisherWork implements JobWork {
     public static final FisherWork INSTANCE = new FisherWork();
     private static final int CAST = 300;
     private static final int TRIP = 4;
+    private static final int TREASURE = 5, JUNK = 10;
 
     @Override
     public boolean wants(ItemEntity item) {
@@ -90,12 +92,22 @@ public class FisherWork implements JobWork {
         ItemStack rod = golem.getTool();
         if (rod.isEmpty() || !water(level, pos)) return;
         Vec3 at = Vec3.atCenterOf(pos).add(0, 0.5, 0);
+        // a program keeping only fish or only treasure rolls the catch the way vanilla weighs it, and throws the rest back
+        GolemProgram prog = golem.program();
+        int roll = prog == null || prog.option(0) == 0 ? -1 : level.getRandom().nextInt(100);
+        int kind = roll < 0 ? 0 : roll < TREASURE ? 3 : roll < TREASURE + JUNK ? 2 : 1;
+        if (kind != 0 && kind != (prog.is(0, "fish") ? 1 : 3)) {
+            level.sendParticles(ParticleTypes.SPLASH, at.x, at.y, at.z, 12, 0.3, 0.0, 0.3, 0.1);
+            level.playSound(null, pos, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.5F, 1.0F);
+            Mc.wear(rod, golem);
+            return;
+        }
         LootParams params = new LootParams.Builder(level).withParameter(LootContextParams.ORIGIN, at).withParameter(LootContextParams.TOOL, rod)
                 .withParameter(LootContextParams.THIS_ENTITY, golem).create(LootContextParamSets.FISHING);
         //? if >=1.20.5 {
-        var table = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.FISHING);
+        var table = level.getServer().reloadableRegistries().getLootTable(kind == 0 ? BuiltInLootTables.FISHING : kind == 1 ? BuiltInLootTables.FISHING_FISH : BuiltInLootTables.FISHING_TREASURE);
         //?} else {
-        /*var table = level.getServer().getLootData().getLootTable(BuiltInLootTables.FISHING);
+        /*var table = level.getServer().getLootData().getLootTable(kind == 0 ? BuiltInLootTables.FISHING : kind == 1 ? BuiltInLootTables.FISHING_FISH : BuiltInLootTables.FISHING_TREASURE);
         *///?}
         for (ItemStack s : table.getRandomItems(params)) {
             Storage.collectOrDrop(golem, level, golem.position(), s);

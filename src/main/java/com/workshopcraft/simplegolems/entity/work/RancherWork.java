@@ -4,6 +4,7 @@ import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.Config;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
 import com.workshopcraft.simplegolems.entity.WorkArea;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -40,21 +41,28 @@ public class RancherWork implements JobWork {
         return "feed";
     }
 
-    private static boolean ready(Animal a) {
+    static boolean ready(Animal a) {
         return a.isAlive() && !a.isBaby() && a.getAge() == 0 && a.canFallInLove();
     }
 
+    // the program's herd cap and spawn egg filter, or the config count and every kind
+    private static List<Animal> breedable(GolemEntity golem, ServerLevel level, WorkArea area) {
+        GolemProgram p = golem.program();
+        int cap = p == null ? Config.rancherMaxAnimals : p.number(0, Config.rancherMaxAnimals);
+        return breedable(level, area, a -> p == null || !p.hasFilter() || p.filter().stream().anyMatch(f -> !f.isEmpty() && Mc.eggFor(f, a.getType())), cap);
+    }
+
     // grown animals of each kind that may still breed, when the kind is under the count and has a partner
-    private static List<Animal> breedable(ServerLevel level, WorkArea area) {
+    static List<Animal> breedable(ServerLevel level, WorkArea area, Predicate<Animal> kind, int cap) {
         Map<EntityType<?>, List<Animal>> kinds = new HashMap<>();
-        for (Animal a : level.getEntitiesOfClass(Animal.class, area.box(), Animal::isAlive)) kinds.computeIfAbsent(a.getType(), k -> new ArrayList<>()).add(a);
+        for (Animal a : level.getEntitiesOfClass(Animal.class, area.box(), a -> a.isAlive() && kind.test(a))) kinds.computeIfAbsent(a.getType(), k -> new ArrayList<>()).add(a);
         List<Animal> out = new ArrayList<>();
         for (List<Animal> all : kinds.values()) {
             long inLove = all.stream().filter(Animal::isInLove).count();
             List<Animal> ready = all.stream().filter(RancherWork::ready).toList();
             // babies to come once one more is fed; an odd one in love is waiting for its partner
             long births = (inLove + 2) / 2;
-            if (all.size() + births > Config.rancherMaxAnimals || ready.size() < (inLove % 2 == 1 ? 1 : 2)) continue;
+            if (all.size() + births > cap || ready.size() < (inLove % 2 == 1 ? 1 : 2)) continue;
             out.addAll(ready);
         }
         return out;
@@ -67,7 +75,7 @@ public class RancherWork implements JobWork {
 
     @Override
     public @Nullable BlockPos findTarget(GolemEntity golem, ServerLevel level, WorkArea area, Predicate<BlockPos> skip) {
-        Animal a = breedable(level, area).stream().filter(e -> food(golem, e) >= 0 && !skip.test(e.blockPosition()))
+        Animal a = breedable(golem, level, area).stream().filter(e -> food(golem, e) >= 0 && !skip.test(e.blockPosition()))
                 .min(Comparator.comparingDouble(golem::distanceToSqr)).orElse(null);
         if (a != null) golem.setSupplies(null);
         return a == null ? null : a.blockPosition();
@@ -76,7 +84,7 @@ public class RancherWork implements JobWork {
     @Override
     public @Nullable Predicate<ItemStack> restock(GolemEntity golem) {
         if (!(golem.level() instanceof ServerLevel level)) return null;
-        List<Animal> want = breedable(level, area(golem)).stream().filter(e -> food(golem, e) < 0).toList();
+        List<Animal> want = breedable(golem, level, area(golem)).stream().filter(e -> food(golem, e) < 0).toList();
         if (want.isEmpty()) {
             golem.setSupplies(null);
             return null;
@@ -101,7 +109,7 @@ public class RancherWork implements JobWork {
 
     @Override
     public void finish(GolemEntity golem, ServerLevel level, BlockPos pos) {
-        List<Animal> ok = breedable(level, area(golem));
+        List<Animal> ok = breedable(golem, level, area(golem));
         Animal a = level.getEntitiesOfClass(Animal.class, golem.getBoundingBox().inflate(3.0), e -> ok.contains(e) && food(golem, e) >= 0).stream()
                 .min(Comparator.comparingDouble(golem::distanceToSqr)).orElse(null);
         if (a == null) return;
