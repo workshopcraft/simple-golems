@@ -6,6 +6,11 @@ import com.workshopcraft.simplegolems.Config;
 import com.workshopcraft.simplegolems.SimpleGolems;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
 import com.workshopcraft.simplegolems.entity.WorkArea;
+import com.workshopcraft.simplegolems.item.GolemProgram;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
@@ -46,7 +51,41 @@ public class MinerWork implements JobWork {
     @Override
     public WorkArea area(GolemEntity golem) {
         WorkArea a = golem.getArea();
-        return a.sizeY() == 1 ? a.down(a.min().getY() - Mc.minY(golem.level()) + 1) : a;
+        a = a.sizeY() == 1 ? a.down(a.min().getY() - Mc.minY(golem.level()) + 1) : a;
+        GolemProgram p = golem.program();
+        int stop = p == null ? Integer.MIN_VALUE : p.number(2, Integer.MIN_VALUE);
+        if (stop <= a.min().getY()) return a;
+        return WorkArea.of(new BlockPos(a.min().getX(), Math.min(stop, a.max().getY()), a.min().getZ()), a.max());
+    }
+
+    // which blocks the program's pattern digs: all of them, two high tunnels off a ring every four layers, or just the staircase
+    static boolean inPattern(@Nullable GolemProgram p, Stairs st, BlockPos pos) {
+        if (p == null || p.option(1) == 0 || !st.spiral() || st.isHeadroom(pos)) return true;
+        if (p.is(1, "stairs")) return false;
+        int band = Math.floorMod(st.depth(pos.getY()), 4);
+        if (band != 1 && band != 2) return false;
+        int x = pos.getX(), z = pos.getZ();
+        if (x == st.minX || x == st.maxX || z == st.minZ || z == st.maxZ) return false;
+        boolean ring = x == st.minX + 1 || x == st.maxX - 1 || z == st.minZ + 1 || z == st.maxZ - 1;
+        return ring || Math.floorMod(x - st.minX - 1, 3) == 0;
+    }
+
+    private static boolean torches(@Nullable GolemProgram p) {
+        if (p == null) return false;
+        for (ItemStack f : p.filter()) if (f.is(Items.TORCH)) return true;
+        return false;
+    }
+
+    // drops it does not keep: anything off the filter, or plain stone, dirt and gravel when the filter only has a torch or is empty
+    private static boolean junk(@Nullable GolemProgram p, ItemStack d) {
+        if (p == null || p.option(0) == 0) return false;
+        boolean listed = false;
+        for (ItemStack f : p.filter()) {
+            if (f.isEmpty() || f.is(Items.TORCH)) continue;
+            listed = true;
+            if (f.is(d.getItem())) return false;
+        }
+        return listed || d.is(BUILDING) || d.is(Items.GRAVEL);
     }
 
     // the staircase: a spiral round the edge when the pit is at least 3 by 3, otherwise straight down the west edge
@@ -131,8 +170,9 @@ public class MinerWork implements JobWork {
 
     // nothing left to dig on this layer but the staircase and its headroom, so a block there is in the way rather than still to be mined
     private static boolean layerDug(ServerLevel level, GolemEntity golem, Stairs st, int y) {
+        GolemProgram prog = golem.program();
         for (BlockPos p : BlockPos.betweenClosed(st.minX, y, st.minZ, st.maxX, y, st.maxZ)) {
-            if (!st.isStair(p) && !st.isHeadroom(p) && mineable(level, p, golem)) return false;
+            if (!st.isStair(p) && !st.isHeadroom(p) && inPattern(prog, st, p) && mineable(level, p, golem)) return false;
         }
         return true;
     }
@@ -170,6 +210,9 @@ public class MinerWork implements JobWork {
         golem.setNeedsBlocks(false);
         BlockPos route = blockedRoute(golem, level, st, skip);
         if (route != null) return route;
+        GolemProgram prog = golem.program();
+        BlockPos torch = torches(prog) && golem.carries(t -> t.is(Items.TORCH)) ? darkSpot(golem, level, st, skip) : null;
+        if (torch != null) return torch;
         // from the rim down: water or lava that got in is sealed first, then missing steps, then the next block to dig
         for (int y = max.getY() + 1; y >= min.getY(); y--) {
             // then the layer below too, so digging never opens on to it
@@ -188,7 +231,7 @@ public class MinerWork implements JobWork {
             if (y > max.getY()) continue;
             List<BlockPos> dig = new ArrayList<>();
             for (BlockPos p : BlockPos.betweenClosed(min.getX(), y, min.getZ(), max.getX(), y, max.getZ())) {
-                if (st.isStair(p) || skip.test(p) || !mineable(level, p, golem) || underFoot(level, golem, p)) continue;
+                if (st.isStair(p) || !inPattern(prog, st, p) || skip.test(p) || !mineable(level, p, golem) || underFoot(level, golem, p)) continue;
                 dig.add(p.immutable());
             }
             dig.sort(Comparator.comparingDouble(p -> golem.distanceToSqr(Vec3.atCenterOf(p))));
@@ -198,6 +241,34 @@ public class MinerWork implements JobWork {
             }
         }
         return null;
+    }
+
+    // somewhere near the golem too dark for it to be safe, on a floor that will not be dug away
+    private @Nullable BlockPos darkSpot(GolemEntity golem, ServerLevel level, Stairs st, Predicate<BlockPos> skip) {
+        GolemProgram prog = golem.program();
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(golem.blockPosition().offset(-6, -2, -6), golem.blockPosition().offset(6, 2, 6))) {
+            if (p.getX() < st.minX || p.getX() > st.maxX || p.getZ() < st.minZ || p.getZ() > st.maxZ || p.getY() > st.top + 1) continue;
+            if (!isDark(level, p) || skip.test(p)) continue;
+            BlockPos below = p.below();
+            if (!st.isStair(below) && inPattern(prog, st, below)) continue;
+            double d = golem.distanceToSqr(Vec3.atCenterOf(p));
+            if (d < bestDist) {
+                best = p.immutable();
+                bestDist = d;
+            }
+        }
+        return best;
+    }
+
+    private static boolean isDark(ServerLevel level, BlockPos p) {
+        return level.getBlockState(p).isAir() && level.getBrightness(LightLayer.BLOCK, p) < 2
+                && Blocks.TORCH.defaultBlockState().canSurvive(level, p);
+    }
+
+    private static boolean isTorchSpot(GolemEntity golem, ServerLevel level, BlockPos p) {
+        return torches(golem.program()) && isDark(level, p);
     }
 
     // water or lava in the pit or right at its edge on this layer, ones with somewhere dry to stand first
@@ -297,7 +368,18 @@ public class MinerWork implements JobWork {
 
     @Override
     public @Nullable Predicate<ItemStack> restock(GolemEntity golem) {
-        return golem.needsBlocks() ? MinerWork::isBuildingBlock : null;
+        if (golem.needsBlocks()) return MinerWork::isBuildingBlock;
+        // torches only when there are some in storage, so a missing torch never shows the blocks bubble
+        if (torches(golem.program()) && !golem.carries(t -> t.is(Items.TORCH)) && golem.level() instanceof ServerLevel level
+                && Storage.nearest(level, area(golem), golem.position(), c -> c.hasAnyMatching(t -> t.is(Items.TORCH)), p -> false) != null) {
+            return t -> t.is(Items.TORCH);
+        }
+        return null;
+    }
+
+    @Override
+    public boolean keeps(GolemEntity golem, int slot) {
+        return torches(golem.program()) && golem.getCarried().get(slot).is(Items.TORCH);
     }
 
     private static boolean isFix(GolemEntity golem, ServerLevel level, BlockPos pos) {
@@ -312,7 +394,9 @@ public class MinerWork implements JobWork {
 
     @Override
     public boolean isValid(GolemEntity golem, ServerLevel level, BlockPos pos) {
-        return isFix(golem, level, pos) ? golem.carries(MinerWork::isBuildingBlock) : isValid(level, pos);
+        if (isFix(golem, level, pos)) return golem.carries(MinerWork::isBuildingBlock);
+        if (isTorchSpot(golem, level, pos)) return golem.carries(t -> t.is(Items.TORCH));
+        return isValid(level, pos);
     }
 
     @Override
@@ -337,6 +421,17 @@ public class MinerWork implements JobWork {
             golem.carriedChanged();
             return;
         }
+        if (isTorchSpot(golem, level, pos)) {
+            for (ItemStack c : golem.getCarried()) {
+                if (!c.is(Items.TORCH)) continue;
+                level.setBlockAndUpdate(pos, Blocks.TORCH.defaultBlockState());
+                level.playSound(null, pos, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 0.8F, 1.0F);
+                c.shrink(1);
+                golem.carriedChanged();
+                break;
+            }
+            return;
+        }
         ItemStack tool = golem.getTool();
         if (tool.isEmpty() || !mineable(level, pos, golem) || isStair(area(golem), pos)) return;
         BlockState s = level.getBlockState(pos);
@@ -344,7 +439,21 @@ public class MinerWork implements JobWork {
         LumberWork.breakQuietly(level, pos, s, true);
         Mc.wear(tool, golem);
         Vec3 at = Vec3.atCenterOf(pos);
-        for (ItemStack d : LumberWork.merge(drops)) Storage.collectOrDrop(golem, level, at, d);
+        GolemProgram prog = golem.program();
+        for (ItemStack d : LumberWork.merge(drops)) {
+            // junk is still kept while it is short of blocks for steps
+            if (junk(prog, d) && !(isBuildingBlock(d) && buildingCarried(golem) < 64)) {
+                if (prog.is(0, "drop")) level.addFreshEntity(new ItemEntity(level, at.x, at.y, at.z, d));
+                continue;
+            }
+            Storage.collectOrDrop(golem, level, at, d);
+        }
+    }
+
+    private static int buildingCarried(GolemEntity golem) {
+        int n = 0;
+        for (ItemStack c : golem.getCarried()) if (isBuildingBlock(c)) n += c.getCount();
+        return n;
     }
 
     // standing half over the block it wants to place: shuffle to the middle of the block it is in, so the next try fits
