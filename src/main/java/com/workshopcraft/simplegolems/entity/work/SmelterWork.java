@@ -2,6 +2,7 @@ package com.workshopcraft.simplegolems.entity.work;
 
 import com.workshopcraft.simplegolems.Mc;
 import com.workshopcraft.simplegolems.entity.GolemEntity;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import com.workshopcraft.simplegolems.entity.WorkArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -46,14 +47,16 @@ public class SmelterWork extends StationWork {
         var type = f instanceof BlastFurnaceBlockEntity ? RecipeType.BLASTING : f instanceof SmokerBlockEntity ? RecipeType.SMOKING : RecipeType.SMELTING;
         // with one chest for both, burnable things such as logs count as fuel
         boolean shared = point(golem, 0) != null && point(golem, 0).equals(point(golem, 1));
+        GolemProgram p = golem.program();
+        Predicate<ItemStack> listed = s -> p == null || !p.hasFilter() || p.matches(s);
         //? if >=1.21.2 {
-        return s -> !s.isEmpty() && (!shared || !isFuel(level, s))
+        return s -> !s.isEmpty() && (!shared || !isFuel(level, s)) && listed.test(s)
                 && level.recipeAccess().getRecipeFor(type, new SingleRecipeInput(s), level).isPresent();
         //?} else if >=1.21 {
-        /*return s -> !s.isEmpty() && (!shared || !isFuel(level, s))
+        /*return s -> !s.isEmpty() && (!shared || !isFuel(level, s)) && listed.test(s)
                 && level.getRecipeManager().getRecipeFor(type, new SingleRecipeInput(s), level).isPresent();
         *///?} else {
-        /*return s -> !s.isEmpty() && (!shared || !isFuel(level, s))
+        /*return s -> !s.isEmpty() && (!shared || !isFuel(level, s)) && listed.test(s)
                 && level.getRecipeManager().getRecipeFor(type, new net.minecraft.world.SimpleContainer(s), level).isPresent();
         *///?}
     }
@@ -93,7 +96,7 @@ public class SmelterWork extends StationWork {
         if (room && (!f.getItem(OUT).isEmpty() || spentFuel(level, f))) return at;
         Predicate<ItemStack> smelt = smeltable(golem, level, f);
         if (smelt.test(input(golem, 0)) && fitsSlot(f, IN, input(golem, 0))) return at;
-        boolean lowFuel = f.getItem(FUEL).getCount() < FUEL_KEEP;
+        boolean lowFuel = f.getItem(FUEL).getCount() < Math.min(FUEL_KEEP, fuelLimit(golem));
         if (lowFuel && fuel(level).test(input(golem, 1)) && fitsSlot(f, FUEL, input(golem, 1))) return at;
         BlockPos inChest = point(golem, 0), fuelChest = point(golem, 1);
         if (input(golem, 0).isEmpty() && (f.getItem(IN).isEmpty() || f.getItem(IN).getCount() < f.getItem(IN).getMaxStackSize())
@@ -134,20 +137,28 @@ public class SmelterWork extends StationWork {
             addResult(golem, level, f.removeItem(OUT, n), at);
         }
         if (spentFuel(level, f) && room(golem)) addResult(golem, level, f.removeItem(FUEL, 64), at);
-        put(f, IN, input(golem, 0), smeltable(golem, level, f));
-        if (f.getItem(FUEL).getCount() < FUEL_KEEP) put(f, FUEL, input(golem, 1), fuel(level));
+        put(f, IN, input(golem, 0), smeltable(golem, level, f), 64);
+        int limit = fuelLimit(golem);
+        if (f.getItem(FUEL).getCount() < Math.min(FUEL_KEEP, limit)) put(f, FUEL, input(golem, 1), fuel(level), limit);
         f.setChanged();
         golem.carriedChanged();
         golem.playSound(SoundEvents.BUNDLE_DROP_CONTENTS, 0.6F, 1.3F);
     }
 
-    private static void put(AbstractFurnaceBlockEntity f, int slot, ItemStack from, Predicate<ItemStack> ok) {
+    // a program can cap how much fuel sits in the furnace
+    private static int fuelLimit(GolemEntity golem) {
+        GolemProgram p = golem.program();
+        return p == null ? 64 : p.number(0, 64);
+    }
+
+    private static void put(AbstractFurnaceBlockEntity f, int slot, ItemStack from, Predicate<ItemStack> ok, int limit) {
         if (!ok.test(from) || !fitsSlot(f, slot, from)) return;
         ItemStack in = f.getItem(slot);
         if (in.isEmpty()) {
-            f.setItem(slot, from.split(from.getMaxStackSize()));
+            f.setItem(slot, from.split(Math.min(limit, from.getMaxStackSize())));
         } else {
-            int n = Math.min(from.getCount(), in.getMaxStackSize() - in.getCount());
+            int n = Math.min(from.getCount(), Math.min(limit, in.getMaxStackSize()) - in.getCount());
+            if (n <= 0) return;
             in.grow(n);
             from.shrink(n);
         }

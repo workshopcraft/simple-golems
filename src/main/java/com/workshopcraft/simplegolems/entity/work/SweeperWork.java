@@ -1,6 +1,7 @@
 package com.workshopcraft.simplegolems.entity.work;
 
 import com.workshopcraft.simplegolems.entity.GolemEntity;
+import com.workshopcraft.simplegolems.item.GolemProgram;
 import com.workshopcraft.simplegolems.entity.WorkArea;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -15,6 +16,14 @@ public class SweeperWork implements JobWork {
     @Override
     public boolean wants(ItemEntity item) {
         return true;
+    }
+
+    // a program's filter is the only items it picks up, or the items it leaves
+    @Override
+    public boolean wants(GolemEntity golem, ItemEntity item) {
+        GolemProgram p = golem.program();
+        if (p == null || !p.hasFilter()) return true;
+        return p.matches(item.getItem()) != p.is(0, "blacklist");
     }
 
     @Override

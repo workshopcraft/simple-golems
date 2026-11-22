@@ -140,7 +140,7 @@ public class WorkGoal extends Goal {
             if (step != null) return begin(Task.TIDY, step, null);
         }
         List<ItemEntity> loose = level.getEntitiesOfClass(ItemEntity.class, itemBox(area),
-                e -> e.isAlive() && work.wants(e) && !skip(e.blockPosition()));
+                e -> e.isAlive() && work.wants(golem, e) && !skip(e.blockPosition()));
         for (ItemEntity e : loose) {
             if (e.getAge() > 3000) e.setExtendedLifetime();
         }
@@ -407,7 +407,7 @@ public class WorkGoal extends Goal {
             case PICKUP -> {
                 Storage.pickUp(golem, item);
                 for (ItemEntity near : golem.level().getEntitiesOfClass(ItemEntity.class, golem.getBoundingBox().inflate(2.5),
-                        e -> e.isAlive() && !e.hasPickUpDelay() && work.wants(e))) {
+                        e -> e.isAlive() && !e.hasPickUpDelay() && work.wants(golem, e))) {
                     Storage.pickUp(golem, near);
                 }
                 task = null;

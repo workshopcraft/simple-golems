@@ -16,6 +16,10 @@ import java.util.function.Predicate;
 public interface JobWork {
     boolean wants(ItemEntity item);
 
+    default boolean wants(GolemEntity golem, ItemEntity item) {
+        return wants(item);
+    }
+
     @Nullable BlockPos findTarget(GolemEntity golem, ServerLevel level, WorkArea area, Predicate<BlockPos> skip);
 
     boolean isValid(ServerLevel level, BlockPos pos);
